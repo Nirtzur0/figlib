@@ -121,6 +121,33 @@ def test_discover_skips_private_and_out(tmp_path):
     assert [p.name for p in discover_programs(figs)] == ["alpha.py", "beta.py"]
 
 
+def test_discover_walks_subject_subdirectories(tmp_path):
+    """The corpus bins programs by subject one level deep; out/ still holds
+    artifacts, not programs, at any depth."""
+    figs = tmp_path / "figures"
+    (figs / "complex").mkdir(parents=True)
+    (figs / "signals").mkdir()
+    (figs / "out" / "complex").mkdir(parents=True)
+    (figs / "toplevel.py").write_text("")
+    (figs / "complex" / "alpha.py").write_text("")
+    (figs / "complex" / "_helper.py").write_text("")
+    (figs / "signals" / "beta.py").write_text("")
+    (figs / "out" / "complex" / "gamma.py").write_text("")
+    found = [str(p.relative_to(figs)) for p in discover_programs(figs)]
+    assert found == ["complex/alpha.py", "signals/beta.py", "toplevel.py"]
+
+
+def test_discover_does_not_recurse_two_levels(tmp_path):
+    """One level only — a nested subject tree is not a thing, and silently
+    picking up a scratch program two levels down would poison the sweep."""
+    figs = tmp_path / "figures"
+    (figs / "complex" / "scratch").mkdir(parents=True)
+    (figs / "complex" / "alpha.py").write_text("")
+    (figs / "complex" / "scratch" / "deep.py").write_text("")
+    found = [str(p.relative_to(figs)) for p in discover_programs(figs)]
+    assert found == ["complex/alpha.py"]
+
+
 def test_cli_regress_exit_code_tracks_drift(tmp_path, capsys):
     """The sweep is only useful in CI if drift actually fails the build."""
     from figlib.cli import main

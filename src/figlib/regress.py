@@ -58,9 +58,16 @@ class RegressResult:
 
 def discover_programs(figures_dir: str | Path) -> list[Path]:
     """Every figure program under figures_dir: *.py, no leading underscore,
-    top level only (figures/out/ holds artifacts, not programs)."""
-    return sorted(p for p in Path(figures_dir).glob("*.py")
-                  if not p.name.startswith("_"))
+    top level or one subject directory deep. `out/` holds artifacts, not
+    programs, so it is excluded at every depth; nesting stops at one level
+    so a scratch directory inside a subject cannot poison the sweep."""
+    root = Path(figures_dir)
+    found = [p for p in root.glob("*.py") if not p.name.startswith("_")]
+    for sub in root.iterdir():
+        if not sub.is_dir() or sub.name == "out" or sub.name.startswith((".", "_")):
+            continue
+        found += [p for p in sub.glob("*.py") if not p.name.startswith("_")]
+    return sorted(found)
 
 
 def _render_to(program_path: Path, dest: Path, paper: bool) -> Path:
