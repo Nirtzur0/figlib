@@ -127,6 +127,12 @@ class _Tally:
             cover = _PATTERN_COVERAGE if it.pattern else it.opacity
             self.ink[("FilledCurve", it.role.name)] += max(area, 0.0) * cover
             self.channels.add("fill")
+            if it.gradient is not None:
+                self.channels.add("gradient")
+                mid = it.gradient.stops[len(it.gradient.stops) // 2][1]
+                self._note_hue(mid)
+            if it.grain > 0:
+                self.channels.add("grain")
             if it.pattern:
                 self.channels.add("pattern")
             if it.holes:
@@ -163,7 +169,7 @@ class _Tally:
 # Channels worth calling out when absent — each has sat unused corpus-wide
 # while being the honest encoding for a class of claims.
 _NOTABLE = ("raster", "fill", "wash", "width_profile", "pattern", "casing",
-            "dash", "arrows")
+            "dash", "arrows", "gradient")
 
 
 def _lines(tly: _Tally) -> list[str]:

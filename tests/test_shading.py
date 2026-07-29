@@ -132,3 +132,15 @@ def test_fill_grain_skipped_on_transparent_theme():
     svg = _svg_of([FilledCurve(_TRI, color="#c0504d", opacity=1.0, grain=0.4)],
                   style=RISO_T)
     assert 'fill="url(#grain)"' not in svg
+
+
+def test_expressivity_counts_gradient_channel():
+    from figlib.expressivity import signals
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0))
+    s = Scene(items=[FilledCurve(_TRI, gradient=g, opacity=1.0, grain=0.2)],
+              xlim=(-0.2, 1.2), ylim=(-0.2, 1.2))
+    chan_line = next(ln for ln in signals(s, DEFAULT_STYLE, width_px=300.0)
+                     if ln.startswith("channels:"))
+    used = chan_line.split(";")[0]
+    assert "gradient" in used and "grain" in used
