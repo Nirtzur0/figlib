@@ -28,6 +28,12 @@ from .gates import (Diagnostic, color_gate, color_gate_figure, mechanical,
 from .render import save, save_figure
 from .style import DEFAULT_STYLE, Style
 
+# Flip to True once every figure carries EXPOSITION. Landing it False lets the
+# gate ship without reddening a corpus that has not written the field yet --
+# regress raises on a failed gate, so enabling it early makes every figure
+# un-renderable and there is no way back in.
+EXPOSITION_REQUIRED = False
+
 
 @dataclass
 class Report:
@@ -36,6 +42,8 @@ class Report:
     svg_path: Path
     png_path: Path
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    # the passage the figure serves; CLAIM is what it argues, this is what for
+    exposition: str | None = None
     # what build() returned plus the resolved style/width, so callers
     # (figcheck --report) can inspect layout without re-running the program
     built: object = None
@@ -112,6 +120,8 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
         if isinstance(style, Theme):
             style = opaque_variant(style)
     diags = numerical(lambda: mod.assertions(geom))
+    from .gates import exposition_gate
+    diags += exposition_gate(mod, enabled=EXPOSITION_REQUIRED)
     stem = mod.__name__ + ("_paper" if paper else "")
     if isinstance(built, Figure):
         if place:
@@ -156,4 +166,4 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
     sigs += clearance_signal(built, style, width_px)
     return Report(mod.__name__, mod.CLAIM, svg_path, png_path, diags,
                   built=built, style=style, width_px=width_px, notes=notes,
-                  signals=sigs)
+                  signals=sigs, exposition=getattr(mod, "EXPOSITION", None))

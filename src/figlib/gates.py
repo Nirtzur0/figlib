@@ -797,3 +797,35 @@ class Checks:
     def done(self) -> None:
         if self.failures:
             raise AssertionError("; ".join(self.failures))
+
+
+# An EXPOSITION shorter than this is a restated CLAIM, not the passage the
+# figure serves. Set from the shortest honest paragraph, not from taste.
+MIN_EXPOSITION_WORDS = 40
+
+
+def exposition_gate(mod, enabled: bool = False) -> list[Diagnostic]:
+    """Does this figure record the argument it serves?
+
+    CLAIM says what the figure argues; EXPOSITION says what argument it is
+    FOR. A figure whose exposition cannot be written has no reason to exist,
+    so this is a cheap early kill.
+
+    It ships DISABLED because `regress._render_to` raises on a failed gate:
+    switching it on before every figure carries the field would make the whole
+    corpus un-renderable. `program.EXPOSITION_REQUIRED` is the switch.
+    """
+    if not enabled:
+        return []
+    text = getattr(mod, "EXPOSITION", "") or ""
+    if not text.strip():
+        return [Diagnostic("exposition", (
+            "no EXPOSITION: state the passage this figure serves, the prose "
+            f"that made it necessary (>= {MIN_EXPOSITION_WORDS} words)"))]
+    n = len(text.split())
+    if n < MIN_EXPOSITION_WORDS:
+        return [Diagnostic("exposition", (
+            f"EXPOSITION is {n} words; the floor is {MIN_EXPOSITION_WORDS}. "
+            "Write the surrounding text that made the figure necessary, not a "
+            "restatement of CLAIM"))]
+    return []

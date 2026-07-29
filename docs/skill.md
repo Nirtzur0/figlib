@@ -47,6 +47,10 @@ A figure program is one module in `figures/`:
 
 ```python
 CLAIM = "one sentence: what the figure ARGUES, not what it draws"
+EXPOSITION = """1-3 paragraphs: the passage this figure SERVES — the
+                surrounding text that made it necessary. WRITE IT FIRST,
+                before any code. If it cannot be written, there is no
+                figure to make. Gated: >= 40 words."""
 THEME = RISO            # optional; CLEAN | RISO (theme.py)
 FORMAT = COLUMN         # MARGIN 340 | COLUMN 680 | WIDE 1000 px slot
 PARAMS = {...}          # every tunable, no magic numbers in compute()
@@ -67,6 +71,7 @@ In this repo:
 ```
 make check F=figures/<name>.py             # render + all deterministic gates
 make check F="figures/<name>.py --report"  # textual layout inventory
+make gallery                               # regenerate figures/out/GALLERY.md
 make regress                               # corpus golden diff (exit 1 on drift)
 make update [F=figures/<name>.py]          # refresh committed SVG+PNG baselines
 ```
