@@ -531,6 +531,64 @@ def histogram(counts: ArrayLike, edges: ArrayLike, *, baseline: float = 0.0,
                         outline=outline, **filled_kw)]
 
 
+def colorbar(scale: Scale, ramp: Callable[[float], str], *,
+             at: tuple[float, float], length: float, thickness: float,
+             orient: str = "y", ticks: Ticks | None = None,
+             label: str | None = None, role: Role = Role.ANNOTATION,
+             n: int = 64, tick_labels: bool = True,
+             tick_len: float | None = None,
+             tick_pad_px: float = 5.0) -> list[Item]:
+    """The scale of a ramp channel, as ordinary items the call site places.
+
+    A strip of n opaque slabs through `ramp` (vector ink, so themes and
+    gates apply; no raster), a FRAME box, and ticks mapping `scale` along
+    the strip — a dB or decade colorbar is just a Log10 scale. `at` is
+    the strip's lower-left corner in math coords; `orient` is the long
+    axis. Ticks sit on the +side (right of a vertical strip, above a
+    horizontal one). axis() is not reused because its geometry lives in
+    the scale's own coordinates; a colorbar's lives wherever `at` puts it.
+    """
+    if orient not in ("x", "y"):
+        raise ValueError(f"orient must be 'x' or 'y', got {orient!r}")
+    if n < 2:
+        raise ValueError(f"colorbar needs n >= 2 slabs, got {n}")
+    x0, y0 = float(at[0]), float(at[1])
+    u0, u1 = scale.range
+
+    def pt(a: float, c: float) -> tuple[float, float]:
+        """a along the strip in [0, length], c across in [0, thickness]."""
+        return (x0 + a, y0 + c) if orient == "x" else (x0 + c, y0 + a)
+
+    items: list[Item] = []
+    for k in range(n):
+        a0, a1 = length * k / n, length * (k + 1) / n
+        items.append(FilledCurve(
+            np.array([pt(a0, 0), pt(a1, 0), pt(a1, thickness), pt(a0, thickness)]),
+            role=role, opacity=1.0, outline=False, color=ramp((k + 0.5) / n)))
+    items.append(Curve(
+        np.array([pt(0, 0), pt(length, 0), pt(length, thickness), pt(0, thickness)]),
+        closed=True, role=Role.FRAME))
+
+    tk = scale.ticks() if ticks is None else ticks
+    tl = tick_len if tick_len is not None else 0.35 * thickness
+    ha, va, off = _tick_label_anchor(orient, +1, tick_pad_px)
+    for p, text in zip(tk.positions, tk.labels):
+        a = length * (float(p) - u0) / (u1 - u0)
+        items.append(Curve(np.array([pt(a, thickness), pt(a, thickness + tl)]),
+                           role=role))
+        if tick_labels:
+            items.append(MathLabel(text, pt(a, thickness + tl), role=role,
+                                   ha=ha, va=va, offset_px=off))
+    if label is not None:
+        if orient == "y":
+            items.append(MathLabel(label, pt(length, thickness / 2), role=role,
+                                   ha="center", va="bottom", offset_px=(0, -6)))
+        else:
+            items.append(MathLabel(label, pt(length, thickness / 2), role=role,
+                                   ha="left", va="center", offset_px=(8, 0)))
+    return items
+
+
 # ---------------------------------------------------------------------------
 # the phase line: 1D dynamics, xdot = f(x)
 
