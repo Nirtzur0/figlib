@@ -148,6 +148,30 @@ def test_discover_does_not_recurse_two_levels(tmp_path):
     assert found == ["complex/alpha.py"]
 
 
+def test_artifact_dir_mirrors_subject(tmp_path):
+    from figlib.regress import artifact_dir
+
+    figs = tmp_path / "figures"
+    assert artifact_dir(figs / "complex" / "x.py", figs) == figs / "out" / "complex"
+    assert artifact_dir(figs / "x.py", figs) == figs / "out"
+
+
+def test_sweep_finds_baselines_in_subject_subdirs(tmp_path):
+    """A subject-binned program's baseline lives in the mirrored out/ dir;
+    the sweep must look there and not in a flat out/."""
+    from figlib.program import run
+    from figlib.regress import sweep
+
+    figs = tmp_path / "figures"
+    (figs / "complex").mkdir(parents=True)
+    prog = figs / "complex" / "toy_regress.py"
+    prog.write_text(TOY)
+    run(prog, out_dir=figs / "out" / "complex")
+
+    results = sweep(figs)
+    assert [r.status for r in results] == ["match"]
+
+
 def test_cli_regress_exit_code_tracks_drift(tmp_path, capsys):
     """The sweep is only useful in CI if drift actually fails the build."""
     from figlib.cli import main

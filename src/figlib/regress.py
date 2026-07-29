@@ -70,6 +70,18 @@ def discover_programs(figures_dir: str | Path) -> list[Path]:
     return sorted(found)
 
 
+def artifact_dir(program_path: str | Path, figures_dir: str | Path) -> Path:
+    """Where this program's committed artifacts live: out/ with the
+    program's subject directory mirrored into it. A program directly in
+    figures/ maps to figures/out/, so nothing outside this repo changes."""
+    program_path, root = Path(program_path), Path(figures_dir)
+    out = root / "out"
+    parent = program_path.parent.resolve()
+    if parent == root.resolve():
+        return out
+    return out / parent.name
+
+
 def _render_to(program_path: Path, dest: Path, paper: bool) -> Path:
     """Run the program into `dest`; return the SVG path. Raises on a failed
     gate so a broken figure cannot masquerade as a clean match."""
@@ -145,18 +157,25 @@ def variants(program_path: Path, out_dir: Path) -> list[bool]:
 
 def sweep(figures_dir: str | Path, out_dir: str | Path | None = None,
           programs: list[Path] | None = None) -> list[RegressResult]:
+    """Compare every program against its committed baseline. `out_dir`
+    forces a single flat directory (tests, ad-hoc runs); the default
+    derives each program's directory with artifact_dir."""
     figures_dir = Path(figures_dir)
-    out = Path(out_dir) if out_dir else figures_dir / "out"
     paths = programs if programs is not None else discover_programs(figures_dir)
-    return [compare_figure(p, out, paper=t)
-            for p in paths for t in variants(p, out)]
+    results = []
+    for p in paths:
+        out = Path(out_dir) if out_dir else artifact_dir(p, figures_dir)
+        results += [compare_figure(p, out, paper=t) for t in variants(p, out)]
+    return results
 
 
-def update_baselines(programs: list[Path], out_dir: str | Path) -> list[Path]:
+def update_baselines(programs: list[Path], out_dir: str | Path | None = None,
+                     figures_dir: str | Path | None = None) -> list[Path]:
     """Overwrite the committed SVG+PNG for each program. Returns SVG paths."""
-    out = Path(out_dir)
     written: list[Path] = []
     for p in programs:
+        out = Path(out_dir) if out_dir else artifact_dir(p, figures_dir or p.parent.parent)
+        out.mkdir(parents=True, exist_ok=True)
         for t in variants(p, out):
             written.append(_render_to(p, out, t))
     return written

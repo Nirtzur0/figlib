@@ -59,18 +59,17 @@ def _regress_main(args) -> int:
     from .regress import discover_programs, sweep, update_baselines
 
     figures_dir = Path(args.figures_dir)
-    out_dir = figures_dir / "out"
     named = [Path(p) for p in args.program]
     programs = named or discover_programs(figures_dir)
 
     if args.update:
-        written = update_baselines(programs, out_dir)
+        written = update_baselines(programs, figures_dir=figures_dir)
         for p in written:
             print(f"UPDATED {p}")
-        print(f"\n{len(written)} baseline(s) refreshed in {out_dir}")
+        print(f"\n{len(written)} baseline(s) refreshed under {figures_dir / 'out'}")
         return 0
 
-    results = sweep(figures_dir, out_dir, programs=programs)
+    results = sweep(figures_dir, programs=programs)
     for r in results:
         print(r.line())
     bad = [r for r in results if not r.ok]
