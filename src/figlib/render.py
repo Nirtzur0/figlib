@@ -92,7 +92,7 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
         elif isinstance(it, Point):
             cx, cy = t.to_canvas(it.xy)
             ink = style.ink(it.role)
-            attrs = {"cx": _fmt(cx), "cy": _fmt(cy), "r": _fmt(style.point_radius)}
+            attrs = {"cx": _fmt(cx), "cy": _fmt(cy), "r": _fmt(style.point_radius * it.radius_scale)}
             if it.filled:
                 attrs["fill"] = ink.color
             else:

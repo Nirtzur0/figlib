@@ -47,8 +47,9 @@ class Transform:
         (x0, x1), (y0, y1) = geometry_extents(scene)
         dx = max(x1 - x0, 1e-12)
         dy = max(y1 - y0, 1e-12)
-        pad = pad_frac * max(dx, dy)
-        x0, x1, y0, y1 = x0 - pad, x1 + pad, y0 - pad, y1 + pad
+        pad_x = pad_frac * dx
+        pad_y = pad_frac * dy
+        x0, x1, y0, y1 = x0 - pad_x, x1 + pad_x, y0 - pad_y, y1 + pad_y
         self.scale = width_px / (x1 - x0)
         self.canvas_w = width_px
         self.canvas_h = (y1 - y0) * self.scale

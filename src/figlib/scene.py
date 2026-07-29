@@ -36,6 +36,7 @@ class Point:
     xy: XY
     role: Role = Role.CONTENT
     filled: bool = True
+    radius_scale: float = 1.0
 
 
 @dataclass
