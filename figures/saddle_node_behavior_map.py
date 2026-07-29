@@ -183,6 +183,24 @@ KEY_UNSTABLE = "unstable-branch"
 KEY_SADDLE = "saddle-node"
 TICK_PX = 6.0
 
+# Tick values whose LABELS the drawn axes skip (r: the origin, and 1.0
+# where the pinned leader marks that r more strongly than a label would;
+# x*: the origin). ONE source for both the axis calls and tick_honesty —
+# the gate must certify the tick set the reader actually gets, not the
+# unskipped one.
+R_TICK_SKIP = (0.0, 1.0)
+X_TICK_SKIP = (0.0,)
+
+
+def _drawn_ticks(tk, skip):
+    """`tk` minus the skipped values — the labeled ticks the page shows."""
+    keep = [i for i, v in enumerate(tk.values)
+            if not any(abs(float(v) - s) <= 1e-9 * max(1.0, abs(s))
+                       for s in skip)]
+    return plots.Ticks(values=tk.values[keep], positions=tk.positions[keep],
+                       labels=tuple(tk.labels[i] for i in keep),
+                       minor=tk.minor)
+
 
 def _thumbnail(ins: dict, g: dict) -> Scene:
     """One word-scale phase line as its own Scene, ready for embed().
@@ -226,10 +244,10 @@ def _diagram(s: Scene, g: dict) -> None:
     # its arrowhead through the tick label read as a collision — the pinned
     # leader marks that r more strongly than the tick it replaces
     s.add(*plots.axis(r_sc, orient="x", at=0.0, ticks=r_sc.ticks(step=0.5),
-                      tick_len=TICK_PX * g["upy"], skip=(0.0, 1.0), label="r",
+                      tick_len=TICK_PX * g["upy"], skip=R_TICK_SKIP, label="r",
                       extend=(0.05, 0.10), role=Role.ANNOTATION))
     s.add(*plots.axis(x_sc, orient="y", at=0.0, ticks=x_sc.ticks(step=1.0),
-                      tick_len=TICK_PX * g["upx"], skip=(0.0,),
+                      tick_len=TICK_PX * g["upx"], skip=X_TICK_SKIP,
                       extend=(0.05, 0.09), role=Role.ANNOTATION))
     s.add(MathLabel(r"x^{*}", (0.0, x_sc.hi + 0.08), role=Role.ANNOTATION,
                     ha="left", va="center", offset_px=(16.0, 0.0)))
@@ -400,8 +418,11 @@ def assertions(g):
     # every thumbnail (the leaders make those r data on this axis)
     r_data = np.concatenate([g["rb"], np.asarray(p["inset_r"], dtype=float)])
     plots.tick_honesty(c, g["r_scale"], r_data, name="r axis",
-                       ticks=g["r_scale"].ticks(step=0.5))
+                       ticks=_drawn_ticks(g["r_scale"].ticks(step=0.5),
+                                          R_TICK_SKIP))
     plots.tick_honesty(c, g["x_scale"],
                        np.concatenate([g["x_stable"], g["x_unstable"]]),
-                       name="x* axis", ticks=g["x_scale"].ticks(step=1.0))
+                       name="x* axis",
+                       ticks=_drawn_ticks(g["x_scale"].ticks(step=1.0),
+                                          X_TICK_SKIP))
     c.done()
