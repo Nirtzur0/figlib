@@ -79,9 +79,13 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
         elif isinstance(it, FilledCurve):
             ink = style.ink(it.role)
             attrs = {"d": _path_d(t.to_canvas_arr(it.pts), closed=True),
-                     "fill": ink.color, "fill-opacity": _fmt(it.opacity)}
+                     "fill": it.color or ink.color, "fill-opacity": _fmt(it.opacity)}
             el = ET.SubElement(root, "path", attrs)
-            if it.outline:
+            if it.edge_color is not None:
+                el.set("stroke", it.edge_color)
+                el.set("stroke-width", _fmt(it.edge_width or 0.4))
+                el.set("stroke-linejoin", "round")
+            elif it.outline:
                 _add_stroke(el, style, it.role)
             else:
                 el.set("stroke", "none")

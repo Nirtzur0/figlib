@@ -31,6 +31,9 @@ class FilledCurve:
     role: Role = Role.CONTENT
     opacity: float = 0.18
     outline: bool = True
+    color: str | None = None       # fill override
+    edge_color: str | None = None  # stroke override (used by 3D shading)
+    edge_width: float | None = None
 
 
 @dataclass
