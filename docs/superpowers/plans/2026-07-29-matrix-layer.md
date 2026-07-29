@@ -1888,6 +1888,15 @@ on the figure as a residual and an energy fraction, not hidden."
 - Consumes: the two figures from Tasks 6–7 as named exemplars.
 - Produces: nothing importable.
 
+**All three files in this task carry another session's uncommitted
+changes** (`docs/architecture.md`, `docs/skill.md`,
+`docs/primitive-gaps.md`, `src/figlib/__init__.py` were all dirty when
+this plan was written, alongside new untracked `src/figlib/correspond.py`
+and `src/figlib/place.py`). Make **targeted Edits after a fresh Read** —
+never a Write-rewrite, and never `git add -A`. Stage only the specific
+paths listed in Step 5. This is the parallel-agent hygiene rule in
+`docs/primitive-gaps.md`.
+
 - [ ] **Step 1: Add `matrix` to the module map**
 
 In `src/figlib/__init__.py`, under `WRITING A FIGURE`, insert after the
