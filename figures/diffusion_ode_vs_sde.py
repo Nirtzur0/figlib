@@ -75,12 +75,6 @@ def build(g):
     s.add(MathLabel(r"\text{generation time}\; (t: T \to 0)", (T / 2, y0),
                     ha="center", va="top", offset_px=(0, 8), role=Role.ANNOTATION))
 
-    # analytic branch means as construction curves: where the two modes travel
-    tt = np.linspace(0, T, 120)
-    for mu in m0.means:
-        branch = np.column_stack([_u(tt, T), mu * np.exp(-tt)])
-        s.add(Curve(branch[np.argsort(branch[:, 0])], role=Role.CONSTRUCTION, width_scale=0.8))
-
     # marginal densities, drawn sideways: prior at the left edge, data at the right
     # each lobe scaled to the same visual width (marginals are shape, not
     # a shared density axis)
@@ -103,11 +97,18 @@ def build(g):
         pts = np.column_stack([_u(g["ts_ode"], T), row])
         s.add(Curve(pts, role=Role.ACCENT1, width_scale=0.9))
 
-    # shared launch points and the two landing modes
+    # shared launch points; endpoints marked per method
     for x0 in g["ode"][:, 0]:
         s.add(Point((0.0, x0), role=Role.CONTENT, radius_scale=0.8))
     for row in g["ode"]:
         s.add(Point((T, row[-1]), role=Role.ACCENT1, radius_scale=0.8))
+    for row in g["sde"][:4]:
+        s.add(Point((T, row[-1]), role=Role.ACCENT2, radius_scale=0.8))
+
+    # an SDE ensemble's endpoints, as a strip inside the data lobe: the
+    # marginal claim shown, not asserted
+    for x_end in g["big_sde"][:70, -1]:
+        s.add(Point((T + 0.10, x_end), role=Role.ACCENT2, radius_scale=0.38))
 
     # method labels anchored to representative paths
     s.add(MathLabel(r"\text{reverse SDE:}\;\; dx = [-x - 2\nabla_x \log p_t]\,dt + \sqrt{2}\,d\bar{w}",
