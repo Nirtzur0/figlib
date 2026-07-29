@@ -20,8 +20,8 @@ CLAIM = (
 PARAMS = {
     "n": 3,
     "theta_max_deg": 72.0,
-    "n_rays": 10,
-    "radii": [0.25, 0.45, 0.65, 0.85, 1.0, 1.05, 1.25],
+    "n_rays": 19,
+    "radii": [0.2, 0.35, 0.5, 0.65, 0.8, 0.9, 1.0, 1.1, 1.25],
     "samples": 160,
     "w_origin": 3.9,   # where the image panel sits
 }
@@ -29,6 +29,16 @@ PARAMS = {
 # viridis, 10 stops — hue encodes theta
 RAY_COLORS = ["#440154", "#482878", "#3e4989", "#31688e", "#26828e",
               "#1f9e89", "#35b779", "#6ece58", "#b5de2b", "#dbc932"]
+
+
+def ray_color(i: int, n: int) -> str:
+    """Interpolate the viridis stops for arbitrary ray counts."""
+    x = i / (n - 1) * (len(RAY_COLORS) - 1)
+    j = min(int(x), len(RAY_COLORS) - 2)
+    f = x - j
+    a = [int(RAY_COLORS[j][k:k+2], 16) for k in (1, 3, 5)]
+    b = [int(RAY_COLORS[j+1][k:k+2], 16) for k in (1, 3, 5)]
+    return "#" + "".join(f"{round(u + f*(v-u)):02x}" for u, v in zip(a, b))
 
 
 def arc_gray(r: float, R: float) -> str:
@@ -83,8 +93,8 @@ def build(g):
         else:
             s.add(Curve(arc, role=Role.MUTED, width_scale=0.85, color=arc_gray(r, R)))
     s.add(Curve(g["arcs"][-1], role=Role.CONTENT, width_scale=1.2))  # outer arc bold
-    for ray, c in zip(g["rays"], RAY_COLORS):
-        s.add(Curve(ray, role=Role.CONTENT, width_scale=0.95, color=c))
+    for i, ray in enumerate(g["rays"]):
+        s.add(Curve(ray, role=Role.CONTENT, width_scale=0.8, color=ray_color(i, len(g["rays"]))))
     s.add(AngleMark((0, 0), (1, 0), (np.cos(g["th_max"]), np.sin(g["th_max"])), radius=0.17))
     s.add(MathLabel(r"\theta", (0.255 * np.cos(g["th_max"] / 2), 0.255 * np.sin(g["th_max"] / 2)),
                     ha="left", va="center", size_pt=10, role=Role.ANNOTATION))
@@ -110,15 +120,14 @@ def build(g):
         else:
             s.add(Curve(shift(arc), role=Role.MUTED, width_scale=0.85, color=arc_gray(r, R)))
     s.add(Curve(shift(g["arcs_w"][-1]), role=Role.CONTENT, width_scale=1.2))
-    for ray, c in zip(g["rays_w"], RAY_COLORS):
-        s.add(Curve(shift(ray), role=Role.CONTENT, width_scale=0.95, color=c))
+    for i, ray in enumerate(g["rays_w"]):
+        s.add(Curve(shift(ray), role=Role.CONTENT, width_scale=0.8, color=ray_color(i, len(g["rays_w"]))))
     th_img = n * g["th_max"]
-    s.add(AngleMark((W, 0), (1, 0), (np.cos(th_img), np.sin(th_img)), radius=0.42))
-    s.add(MathLabel(rf"{n}\theta", (W + 0.60 * np.cos(th_img / 2), 0.60 * np.sin(th_img / 2)),
-                    ha="center", va="center", size_pt=10, role=Role.ANNOTATION))
+    s.add(MathLabel(r"n\theta", (W + (Rn + 0.16) * np.cos(th_img / 2), (Rn + 0.16) * np.sin(th_img / 2)),
+                    ha="center", va="center", role=Role.ANNOTATION))
     s.add(Point((W + 1.0, 0.0), role=Role.CONTENT, radius_scale=0.7))
     s.add(MathLabel(r"1", (W + 1.0, 0.0), ha="center", va="top", offset_px=(0, 8)))
-    s.add(MathLabel(rf"r^{n}", (W + Rn, 0.0), ha="center", va="top", offset_px=(8, 8)))
+    s.add(MathLabel(r"r^{n}", (W + Rn, 0.0), ha="center", va="top", offset_px=(8, 8)))
     s.add(MathLabel(r"0", (W, 0.0), ha="right", va="top", offset_px=(-5, 6)))
 
     return s
