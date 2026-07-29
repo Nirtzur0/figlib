@@ -46,6 +46,16 @@ BAR_HALF = 0.12       # half-length of an `inhibit` edge's flat terminal bar
 CHEVRON_GAP = 0.15    # spacing between the stacked heads of a `copy` edge
 TRUNC_DIAMOND_HALF = 0.10   # half-diagonal of a truncated edge's terminator
 
+# A junction's argument labels sit at this multiple of its own radius —
+# dimensionless for the same reason STACK_OFFSET is: the gap has to read
+# the same at every junction size.
+ARG_RADIUS = 1.45
+
+# The junction's near-axis cone, as |cos| (resp. |sin|) of the arg angle:
+# below this the label is treated as straight up/down (or dead sideways)
+# and gets a centered anchor on that axis. 0.25 is ~14 degrees of slop.
+ARG_AXIS_TOL = 0.25
+
 # The elision stack's per-card offset, as a FRACTION of min(w, h) rather
 # than a math length: a stack has to read as the same lie at every box
 # size, and a fixed offset would swallow a small node and vanish on a big
@@ -282,6 +292,101 @@ def unknown_node(key: str, center: XY, width: float, height: float, **kw) -> Nod
     return Node(key, center, width, height, **kw)
 
 
+# --- operator junctions -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Junction:
+    """A named operator sitting ON the junction where its arguments meet.
+
+    The corpus's K/Q glyph. A circled `+` says two things were combined; a
+    `Junction` says WHICH operator combined them and WHICH role each
+    incoming edge played, by annotating the arrival angles: `args=((90,
+    "q"), (180, "k"))` labels the edge coming down from above `q` and the
+    one coming in from the left `k`. That is the whole generalization —
+    the circled `+` is role-blind because its arguments commute, and most
+    operators worth drawing do not.
+
+    Not a `_Box`: it is a circle, and its ports are on the circle rather
+    than on a circumscribed square, so an edge arriving on a diagonal lands
+    exactly where the ink is (`circle_node` accepts that error to stay a
+    `Node`; here the roles are angular, so diagonals are the common case).
+    It still exposes `key`, `rect` and `boundary_distance`, which is all
+    `clearance_violations` and `port_offsets` ask of a `Node` — so a
+    junction is an obstruction in the same call, with no fork in the check.
+    """
+
+    key: str
+    center: XY
+    glyph: str
+    radius: float = 0.3
+    args: tuple[tuple[float, str], ...] = ()   # (angle_deg CCW from +x, latex)
+    role: Role = Role.CONTENT
+    fill: str | None = None            # paper colour, as on `Node`
+    label_role: Role | None = None     # None -> the junction's own role
+    label_size_pt: float | None = None
+    arg_role: Role = Role.ANNOTATION
+    arg_size_pt: float | None = None   # None -> the style's annotation size
+    n_arc: int = 12
+
+    @property
+    def rect(self) -> tuple[float, float, float, float]:
+        """(x0, y0, x1, y1) of the circumscribed square — what the box-based
+        clearance check tests against."""
+        cx, cy = self.center
+        r = float(self.radius)
+        return (cx - r, cy - r, cx + r, cy + r)
+
+    def outline(self) -> np.ndarray:
+        # A circle IS a rounded rect at radius = half-side; reusing it keeps
+        # one polygon generator in the module.
+        d = 2.0 * float(self.radius)
+        return rounded_rect(self.center, d, d, float(self.radius), n_arc=self.n_arc)
+
+    def port(self, angle_deg: float) -> XY:
+        """Point on the circle at `angle_deg` (0 = +x, CCW). Edges attach here."""
+        th = np.radians(float(angle_deg))
+        return (self.center[0] + float(self.radius) * float(np.cos(th)),
+                self.center[1] + float(self.radius) * float(np.sin(th)))
+
+    def contains(self, p, pad: float = 0.0) -> bool:
+        return self.boundary_distance(p) <= pad or float(np.hypot(
+            float(p[0]) - self.center[0], float(p[1]) - self.center[1])
+        ) <= float(self.radius)
+
+    def boundary_distance(self, p) -> float:
+        """Unsigned distance from p to the CIRCLE — so a port is at 0 on any
+        angle, which is what makes `attached_nodes` exact for a junction."""
+        d = float(np.hypot(float(p[0]) - self.center[0],
+                           float(p[1]) - self.center[1]))
+        return abs(d - float(self.radius))
+
+    def _arg_label(self, angle_deg: float, latex: str) -> MathLabel:
+        th = np.radians(float(angle_deg))
+        c, s = float(np.cos(th)), float(np.sin(th))
+        r = ARG_RADIUS * float(self.radius)
+        # ha/va point the text AWAY from the glyph: on the right half the
+        # anchor is the text's left edge, on the top half its bottom edge.
+        ha = "center" if abs(c) < ARG_AXIS_TOL else ("left" if c > 0 else "right")
+        va = "center" if abs(s) < ARG_AXIS_TOL else ("bottom" if s > 0 else "top")
+        return MathLabel(latex, (self.center[0] + r * c, self.center[1] + r * s),
+                         role=self.arg_role, ha=ha, va=va,
+                         size_pt=self.arg_size_pt)
+
+    def items(self) -> list[Item]:
+        pts = self.outline()
+        out: list[Item] = [
+            Curve(pts, role=self.role, closed=True) if self.fill is None
+            else FilledCurve(pts, role=self.role, color=self.fill,
+                             opacity=1.0, outline=True)]
+        out.append(MathLabel(self.glyph, self.center,
+                             role=self.label_role or self.role,
+                             ha="center", va="center",
+                             size_pt=self.label_size_pt))
+        out += [self._arg_label(a, latex) for a, latex in self.args]
+        return out
+
+
 # --- regions: grouping as a ground, not a line ------------------------------
 #
 # The transformer-circuits idiom. A group of nodes gets a pale filled
@@ -358,11 +463,16 @@ class Region(_Box):
 
 
 def bbox(objs: Sequence, pad: float = 0.0) -> tuple[float, float, float, float]:
-    """(x0, y0, x1, y1) enclosing Nodes, Regions and raw points, plus pad."""
+    """(x0, y0, x1, y1) enclosing Nodes, Regions, Junctions and raw points.
+
+    A `Junction` contributes its circumscribed square but is NOT recorded as
+    a member by `enclose` — membership is a claim `region_containment_
+    violations` checks against the node list, and a junction is not in it.
+    """
     xs: list[float] = []
     ys: list[float] = []
     for o in objs:
-        if isinstance(o, _Box):
+        if isinstance(o, (_Box, Junction)):
             x0, y0, x1, y1 = o.rect
             xs += [x0, x1]
             ys += [y0, y1]
@@ -690,11 +800,11 @@ class Grid:
 
 
 def items(*objs) -> list[Item]:
-    """Flatten Nodes / Edges / nested sequences / raw Items into a scene
-    list: `scene.add(*schematic.items(nodes, edges, rail_items))`."""
+    """Flatten Nodes / Junctions / Edges / nested sequences / raw Items into
+    a scene list: `scene.add(*schematic.items(nodes, edges, rail_items))`."""
     out: list[Item] = []
     for o in objs:
-        if isinstance(o, (Node, Edge)):
+        if isinstance(o, (Node, Junction, Edge)):
             out.extend(o.items())
         elif isinstance(o, (list, tuple)):
             out.extend(items(*o))
@@ -796,13 +906,18 @@ def region_nesting_violations(regions: Sequence[Region],
     return bad
 
 
-def attached_nodes(e: Edge, nodes: Sequence[Node], tol: float) -> list[str]:
-    """Keys of the nodes an edge's anchors land on (within tol)."""
+def attached_nodes(e: Edge, nodes: Sequence[Node | Junction], tol: float) -> list[str]:
+    """Keys of the obstructions an edge's anchors land on (within tol).
+
+    `Junction` is admitted alongside `Node` here and in every check below:
+    all three of them ask only for `key`, `rect` and `boundary_distance`,
+    and a junction answers those about its circle. Pass one list.
+    """
     return [nd.key for nd in nodes
             if any(nd.boundary_distance(a) <= tol for a in e.anchors)]
 
 
-def port_offsets(edges: Sequence[Edge], nodes: Sequence[Node]
+def port_offsets(edges: Sequence[Edge], nodes: Sequence[Node | Junction]
                  ) -> list[tuple[str, int, float]]:
     """(edge key, anchor index, distance to the NEAREST node boundary) for
     every edge anchor. Port attachment is exact when these are ~0."""
@@ -814,7 +929,7 @@ def port_offsets(edges: Sequence[Edge], nodes: Sequence[Node]
     return out
 
 
-def max_port_offset(edges: Sequence[Edge], nodes: Sequence[Node]) -> float:
+def max_port_offset(edges: Sequence[Edge], nodes: Sequence[Node | Junction]) -> float:
     offs = port_offsets(edges, nodes)
     return max((d for _, _, d in offs), default=0.0)
 
@@ -843,11 +958,11 @@ def _seg_clip_rect(p, q, rect: tuple[float, float, float, float], pad: float = 0
     return a, b
 
 
-def clearance_violations(edges: Sequence[Edge], nodes: Sequence[Node],
+def clearance_violations(edges: Sequence[Edge], nodes: Sequence[Node | Junction],
                          pad: float = 0.0, attach_tol: float = 1e-9
                          ) -> list[str]:
-    """Edges whose polyline enters the padded rect of a node it is not
-    attached to — the schematic version of a label collision.
+    """Edges whose polyline enters the padded rect of a node or junction it
+    is not attached to — the schematic version of a label collision.
 
     Attachment is decided by the edge's own anchors, so an edge that ends
     ON a box is allowed to touch it and only that one.

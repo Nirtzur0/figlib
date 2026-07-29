@@ -944,3 +944,94 @@ class TestDeclaredTruncation:
         e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True, label="f")
         latexes = [it.latex for it in e.items() if isinstance(it, MathLabel)]
         assert "f" in latexes and any(r"\cdots" in x for x in latexes)
+
+
+class TestOperatorJunction:
+    def test_junction_glyph_and_arg_roles(self):
+        j = sch.Junction("qk", (2.0, 3.0), r"\mathrm{QK}", radius=0.6,
+                         args=((90.0, "q"), (180.0, "k")))
+        labels = [it for it in j.items() if isinstance(it, MathLabel)]
+
+        glyph = next(lb for lb in labels if lb.latex == r"\mathrm{QK}")
+        assert glyph.anchor == pytest.approx((2.0, 3.0))
+        assert glyph.ha == "center" and glyph.va == "center"
+
+        q = next(lb for lb in labels if lb.latex == "q")
+        assert q.anchor == pytest.approx((2.0, 3.0 + 1.45 * 0.6), abs=1e-9)
+        k = next(lb for lb in labels if lb.latex == "k")
+        assert k.anchor == pytest.approx((2.0 - 1.45 * 0.6, 3.0), abs=1e-9)
+
+    def test_the_circle_is_drawn_at_the_stated_radius(self):
+        j = sch.Junction("j", (1.0, -2.0), r"\odot", radius=0.35)
+        (circle,) = [it for it in j.items() if isinstance(it, Curve)]
+
+        assert circle.closed
+        r = np.hypot(*(circle.pts - np.array([1.0, -2.0])).T)
+        assert np.allclose(r, 0.35, atol=1e-12)
+
+    def test_ports_lie_on_the_circle_at_the_stated_angle(self):
+        j = sch.Junction("j", (2.0, 3.0), r"+", radius=0.6)
+
+        assert j.port(0.0) == pytest.approx((2.6, 3.0))
+        assert j.port(90.0) == pytest.approx((2.0, 3.6))
+        assert j.port(180.0) == pytest.approx((1.4, 3.0))
+        # a diagonal port is on the CIRCLE, not on a circumscribed square
+        assert j.port(45.0) == pytest.approx(
+            (2.0 + 0.6 / np.sqrt(2.0), 3.0 + 0.6 / np.sqrt(2.0)))
+        assert j.boundary_distance(j.port(45.0)) < 1e-12
+
+    def test_arg_labels_grow_away_from_the_circle(self):
+        # ha/va are chosen per octant so the text never runs back over the
+        # glyph: right half anchors on its left edge, top half on its bottom.
+        j = sch.Junction("j", (0.0, 0.0), r"f", radius=1.0,
+                         args=((0.0, "e"), (90.0, "n"), (180.0, "w"),
+                               (270.0, "s"), (45.0, "ne")))
+        by = {lb.latex: lb for lb in j.items() if isinstance(lb, MathLabel)}
+
+        assert (by["e"].ha, by["e"].va) == ("left", "center")
+        assert (by["w"].ha, by["w"].va) == ("right", "center")
+        assert (by["n"].ha, by["n"].va) == ("center", "bottom")
+        assert (by["s"].ha, by["s"].va) == ("center", "top")
+        assert (by["ne"].ha, by["ne"].va) == ("left", "bottom")
+
+    def test_arg_labels_are_annotation_and_sized_apart_from_the_glyph(self):
+        j = sch.Junction("j", (0.0, 0.0), r"\odot", radius=0.5,
+                         args=((90.0, "q"),), label_size_pt=13.0,
+                         arg_size_pt=8.5, role=Role.ACCENT1)
+        by = {lb.latex: lb for lb in j.items() if isinstance(lb, MathLabel)}
+
+        assert by[r"\odot"].role is Role.ACCENT1
+        assert by[r"\odot"].size_pt == 13.0
+        assert by["q"].role is Role.ANNOTATION
+        assert by["q"].size_pt == 8.5
+
+    def test_a_filled_junction_masks_what_runs_behind_it(self):
+        j = sch.Junction("j", (0.0, 0.0), r"+", radius=0.4, fill="#ffffff")
+        its = j.items()
+
+        (fill,) = [it for it in its if isinstance(it, FilledCurve)]
+        assert fill.color == "#ffffff" and fill.opacity == 1.0
+        assert fill.outline                     # the circle still reads
+        assert not [it for it in its if isinstance(it, Curve)
+                    and not isinstance(it, FilledCurve)]
+
+    def test_an_unfilled_junction_is_one_stroked_circle(self):
+        j = sch.Junction("j", (0.0, 0.0), r"+", radius=0.4)
+        assert not [it for it in j.items() if isinstance(it, FilledCurve)]
+
+    def test_a_junction_with_no_args_emits_only_circle_and_glyph(self):
+        assert len(sch.Junction("j", (0.0, 0.0), r"+", radius=0.4).items()) == 2
+
+    def test_a_junction_is_an_obstruction_like_a_node(self):
+        j = sch.Junction("qk", (0.0, 0.0), r"\odot", radius=0.5)
+        through = sch.edge((-3.0, 0.0), (3.0, 0.0), "map")
+        arriving = sch.edge((-3.0, 0.0), j.port(180.0), "map")
+
+        assert sch.clearance_violations([through], [j])
+        assert sch.clearance_violations([arriving], [j]) == []
+
+    def test_items_flattens_a_junction_like_a_node(self):
+        j = sch.Junction("j", (0.0, 0.0), r"+", radius=0.4, args=((90.0, "q"),))
+        flat = sch.items([j])
+        assert [type(it) for it in flat] == [type(it) for it in j.items()]
+        assert [it.latex for it in flat if isinstance(it, MathLabel)] == ["+", "q"]
