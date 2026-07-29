@@ -26,7 +26,8 @@ _DESCENT_FRAC = 0.2
 class Diagnostic:
     kind: str    # 'label-collision' | 'clipped' | 'tiny-label' | 'label-scale'
                  # | 'annotation-load' | 'numerical' | 'faint-ink' | 'hue-collapse'
-                 # | 'label-on-ink' | 'arrow-on-mark'
+                 # | 'label-on-ink' | 'arrow-on-mark' | 'hue-split'
+                 # | 'hue-collision'
     detail: str
 
 

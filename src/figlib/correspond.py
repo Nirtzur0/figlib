@@ -207,6 +207,86 @@ def _frame_diagnostics(corr: Correspondence, scales: Sequence[tuple[float, float
     return diags
 
 
+# --- hue as a referential noun ----------------------------------------------
+#
+# corpus-study.md §6: a hue is a NOUN. It names one object, is declared once,
+# and means that object everywhere it appears — which is what lets a reader
+# cross a panel boundary without re-reading the legend. Two ways to break it,
+# both mechanical:
+#
+#   hue-split      one key, two inks — the object appears twice as two objects
+#   hue-collision  two keys, one correspondence hue — one noun, two referents
+#
+# Split is scoped WITHIN a Scene on purpose. Across a Figure's panels the same
+# defect is already the residual above (`_facet` puts color in the identity
+# fingerprint), and reporting it twice would make the fix ambiguous.
+# Collision is pooled across the whole figure, because correspondence is
+# exactly the thing that has to survive the panel boundary.
+#
+# Only marks participate. A keyed group routinely spans the object AND its
+# annotation — demo_panels_zsquared keys a Curve, an AngleMark and a label
+# together — and annotation ink is text ink, not a claim about the object's
+# hue. Including it would report every properly-labelled object as split.
+_HUE_BEARING = ("Curve", "FilledCurve", "Vector", "Point")
+
+
+def _hue_marks(scene: Scene, style: Style):
+    """(key, resolved color) for each keyed mark, render's own precedence."""
+    for item in scene.items:
+        key = getattr(item, "key", None)
+        if not key or type(item).__name__ not in _HUE_BEARING:
+            continue
+        role = getattr(item, "role", None)
+        color = getattr(item, "color", None)
+        if color is None and role is not None:
+            color = style.ink(role).color
+        if color:
+            yield key, color
+
+
+def hue_binding_violations(scenes: Scene | Sequence[Scene],
+                           style: Style) -> list[Diagnostic]:
+    """One hue, one named object — the reader's index into a composite.
+
+    `scenes` is one Scene or a figure's panels in order.
+    """
+    from .theme import CORRESPONDENCE
+
+    parts = [scenes] if isinstance(scenes, Scene) else list(scenes)
+    diags: list[Diagnostic] = []
+
+    for i, scene in enumerate(parts):
+        inks: dict[str, set[str]] = {}          # key -> lowered colors
+        for key, color in _hue_marks(scene, style):
+            inks.setdefault(key, set()).add(str(color).lower())
+        where = f"panel[{i}] " if len(parts) > 1 else ""
+        for key, seen in sorted(inks.items()):
+            if len(seen) > 1:
+                drawn = ", ".join(sorted(seen))
+                diags.append(Diagnostic("hue-split", (
+                    f"{where}key {key!r} is one object drawn in "
+                    f"{len(seen)} inks — {drawn}. A hue names an object; two "
+                    f"hues on one name read as two objects. Give every mark "
+                    f"of {key!r} the same color, or split the key.")))
+
+    # Collision: pooled, and only the categorical channel. A bare '#rrggbb'
+    # is not claiming identity, and ramp/shade hues are ordered quantity.
+    owners: dict[str, set[str]] = {}
+    for scene in parts:
+        for key, color in _hue_marks(scene, style):
+            if getattr(color, "channel", None) == CORRESPONDENCE:
+                owners.setdefault(str(color).lower(), set()).add(key)
+    for color, keys in sorted(owners.items()):
+        if len(keys) > 1:
+            named = ", ".join(repr(k) for k in sorted(keys))
+            diags.append(Diagnostic("hue-collision", (
+                f"correspondence hue {color} names {len(keys)} objects — "
+                f"{named}. The hue is the reader's index into the figure, so "
+                f"one hue must mean one thing everywhere. Give each object "
+                f"its own categorical slot, or key them as the same object.")))
+    return diags
+
+
 def residual(fig: Figure, corrs: Iterable[Correspondence], style: Style,
              width_px: float) -> list[Diagnostic]:
     """Everything that differs across each declared binding and was not
