@@ -6,10 +6,17 @@ import numpy as np
 import pytest
 
 from figlib.color import is_monotone, lightness, to_oklab
-from figlib.scene import FilledCurve, Gradient
+from figlib.render import to_svg
+from figlib.scene import FilledCurve, Gradient, Scene
 from figlib.shading import chroma_ramp, quantize
+from figlib.style import DEFAULT_STYLE
 
 _TRI = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+
+
+def _svg_of(items, style=DEFAULT_STYLE):
+    s = Scene(items=list(items), xlim=(-0.2, 1.2), ylim=(-0.2, 1.2))
+    return to_svg(s, style, width_px=300)
 
 
 def test_ramp_lightness_monotone():
@@ -84,3 +91,27 @@ def test_filledcurve_gradient_alone_ok():
     g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0))
     fc = FilledCurve(_TRI, gradient=g, grain=0.3, opacity=1.0)
     assert fc.gradient is g and fc.grain == 0.3
+
+
+def test_gradient_def_emitted_userspace():
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0))
+    svg = _svg_of([FilledCurve(_TRI, gradient=g, opacity=1.0)])
+    assert 'gradientUnits="userSpaceOnUse"' in svg
+    assert "linearGradient" in svg
+    assert 'fill="url(#grad-' in svg
+
+
+def test_gradient_defs_deduped():
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0))
+    svg = _svg_of([FilledCurve(_TRI, gradient=g, opacity=1.0),
+                   FilledCurve(_TRI + 0.05, gradient=g, opacity=1.0)])
+    assert svg.count("<linearGradient") == 1
+
+
+def test_radial_gradient_emitted():
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.5, 0.5), (1.0, 0.5), kind="radial")
+    svg = _svg_of([FilledCurve(_TRI, gradient=g, opacity=1.0)])
+    assert "radialGradient" in svg

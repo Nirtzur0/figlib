@@ -6,6 +6,7 @@ ink has a bbox we own.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,8 +15,9 @@ from xml.etree import ElementTree as ET
 import numpy as np
 
 from .layout import Transform, geometry_extents
-from .scene import (AngleMark, Brace, Callout, Curve, FilledCurve, MathLabel,
-                    Point, RasterField, RightAngleMark, Scene, Vector)
+from .scene import (AngleMark, Brace, Callout, Curve, FilledCurve, Gradient,
+                    MathLabel, Point, RasterField, RightAngleMark, Scene,
+                    Vector)
 from .style import DEFAULT_STYLE, Role, Style
 from .typeset import draw_math, render_math
 
@@ -283,6 +285,32 @@ def _ensure_pattern(defs: ET.Element, pattern: str, color: str) -> str:
     return pid
 
 
+def _ensure_gradient(defs: ET.Element, grad: Gradient, t: Transform) -> str:
+    """One gradient def per (kind, stops, canvas axis), content-addressed."""
+    x0, y0 = t.to_canvas(grad.p0)
+    x1, y1 = t.to_canvas(grad.p1)
+    key = (grad.kind, grad.stops, round(x0, 2), round(y0, 2),
+           round(x1, 2), round(y1, 2))
+    gid = "grad-" + hashlib.md5(repr(key).encode()).hexdigest()[:10]
+    tag = "linearGradient" if grad.kind == "linear" else "radialGradient"
+    if defs.find(f"./{tag}[@id='{gid}']") is not None:
+        return gid
+    if grad.kind == "linear":
+        el = ET.SubElement(defs, "linearGradient", {
+            "id": gid, "gradientUnits": "userSpaceOnUse",
+            "x1": _fmt(x0), "y1": _fmt(y0), "x2": _fmt(x1), "y2": _fmt(y1)})
+    elif grad.kind == "radial":
+        el = ET.SubElement(defs, "radialGradient", {
+            "id": gid, "gradientUnits": "userSpaceOnUse",
+            "cx": _fmt(x0), "cy": _fmt(y0),
+            "r": _fmt(math.hypot(x1 - x0, y1 - y0))})
+    else:
+        raise ValueError(f"unknown gradient kind {grad.kind!r}")
+    for off, color in grad.stops:
+        ET.SubElement(el, "stop", {"offset": _fmt(off), "stop-color": color})
+    return gid
+
+
 def _hex_rgb(color: str) -> tuple[int, int, int]:
     c = str(color).lstrip("#")
     return tuple(int(c[k:k + 2], 16) for k in (0, 2, 4))
@@ -423,7 +451,11 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
             attrs = {"d": d}
             if it.holes:
                 attrs["fill-rule"] = "evenodd"
-            if it.pattern is not None and defs is not None:
+            if it.gradient is not None and defs is not None:
+                attrs["fill"] = f"url(#{_ensure_gradient(defs, it.gradient, t)})"
+                if it.opacity < 1.0:
+                    attrs["fill-opacity"] = _fmt(it.opacity)
+            elif it.pattern is not None and defs is not None:
                 # texture is ink, not a wash — item opacity does not apply
                 attrs["fill"] = f"url(#{_ensure_pattern(defs, it.pattern, fill_color)})"
             else:
