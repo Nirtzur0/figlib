@@ -341,11 +341,26 @@ def markers(x: ArrayLike, y: ArrayLike, shape: str = "circle", *,
     as `phase_line` does, wherever one would run through.
     """
     rx, ry = _radii(size)
-    unit = _unit_shape(shape, n_circle) * _SHAPE_AREA_SCALE.get(shape, 1.0)
     xs = np.asarray(x, dtype=float).ravel()
     ys = np.asarray(y, dtype=float).ravel()
     if xs.shape != ys.shape:
         raise ValueError(f"marker x/y length mismatch: {xs.shape} vs {ys.shape}")
+    if shape == "cross":
+        # the pole glyph. Stroke-only by nature — a x has no interior —
+        # so filled would silently mean nothing; diagonals scaled so
+        # tip-to-tip span equals the circle's diameter at the same size
+        if filled:
+            raise ValueError("cross markers are stroke-only — pass filled=False")
+        c = 1.0 / math.sqrt(2.0)
+        out_x: list[Item] = []
+        for cx, cy in zip(xs, ys):
+            for sy in (1.0, -1.0):
+                out_x.append(Curve(
+                    np.array([[cx - rx * c, cy - sy * ry * c],
+                              [cx + rx * c, cy + sy * ry * c]]),
+                    role=role, color=color, width_scale=width_scale))
+        return out_x
+    unit = _unit_shape(shape, n_circle) * _SHAPE_AREA_SCALE.get(shape, 1.0)
     out: list[Item] = []
     for cx, cy in zip(xs, ys):
         pts = np.column_stack([cx + rx * unit[:, 0], cy + ry * unit[:, 1]])
@@ -354,6 +369,70 @@ def markers(x: ArrayLike, y: ArrayLike, shape: str = "circle", *,
                    else Curve(pts, closed=True, role=role, color=color,
                               width_scale=width_scale))
     return out
+
+
+def stems(x: ArrayLike, y: ArrayLike, *, baseline: float = 0.0,
+          marker: str | None = "circle", filled: bool = True,
+          size: float | tuple[float, float] = 0.03,
+          xscale: Scale | None = None, yscale: Scale | None = None,
+          role: Role = Role.CONTENT, color: str | None = None,
+          width_scale: float = 1.0) -> list[Item]:
+    """A discrete sequence x[n]: one baseline-to-sample stem plus a marker
+    head per sample.
+
+    This is the visual TYPE for sampled data — a measure (delta train) is
+    `impulses`, a continuous function is `series`; keeping the three
+    distinct is the domain's load-bearing convention. The stem stops one
+    marker-radius short of a hollow head so the head reads hollow (the
+    phase_line trick); a sample shorter than that gap keeps its marker
+    and drops the stem. Scales are applied here, once, baseline included.
+    """
+    xs = np.asarray(x, dtype=float).ravel()
+    ys = np.asarray(y, dtype=float).ravel()
+    if xs.shape != ys.shape:
+        raise ValueError(f"stems x/y length mismatch: {xs.shape} vs {ys.shape}")
+    ux = xscale.fwd(xs) if xscale is not None else xs
+    uy = yscale.fwd(ys) if yscale is not None else ys
+    base = float(yscale.fwd([baseline])[0]) if yscale is not None else float(baseline)
+    _, ry = _radii(size)
+    gap = ry if (marker is not None and not filled) else 0.0
+    items: list[Item] = []
+    for cx, cy in zip(ux, uy):
+        s = 1.0 if cy >= base else -1.0
+        stop = cy - s * gap
+        if s * (stop - base) > 1e-12:
+            items.append(Curve(np.array([[cx, base], [cx, stop]]), role=role,
+                               color=color, width_scale=width_scale))
+    if marker is not None:
+        items += markers(ux, uy, marker, size=size, filled=filled, role=role,
+                         color=color, width_scale=width_scale)
+    return items
+
+
+def impulses(x: ArrayLike, weights: ArrayLike, *, baseline: float = 0.0,
+             xscale: Scale | None = None, yscale: Scale | None = None,
+             role: Role = Role.CONTENT,
+             width_scale: float = 1.0) -> list[Vector]:
+    """Bracewell's delta convention: an arrow whose HEIGHT is the weight.
+
+    A distribution has no graph, so what gets drawn is the measure — an
+    impulse of weight 2 is an arrow twice as tall, negative weight points
+    down. The arrowhead is what distinguishes it from a stem at a glance;
+    that type distinction (arrow = measure, lollipop = sample) is the
+    point of having two producers. `weights` are axis-coordinate lengths:
+    a weight is not a data value and does not pass through a scale;
+    `baseline` does.
+    """
+    xs = np.asarray(x, dtype=float).ravel()
+    ws = np.asarray(weights, dtype=float).ravel()
+    if xs.shape != ws.shape:
+        raise ValueError(
+            f"impulses x/weights length mismatch: {xs.shape} vs {ws.shape}")
+    ux = xscale.fwd(xs) if xscale is not None else xs
+    base = float(yscale.fwd([baseline])[0]) if yscale is not None else float(baseline)
+    return [Vector((float(cx), base), (float(cx), base + float(w)),
+                   role=role, width_scale=width_scale)
+            for cx, w in zip(ux, ws)]
 
 
 def series(x: ArrayLike, y: ArrayLike, *, xscale: Scale | None = None,
