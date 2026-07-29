@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .scene import (AngleMark, Curve, FilledCurve, MathLabel, Point,
-                    RightAngleMark, Scene, Vector)
+from .scene import (AngleMark, Brace, Callout, Curve, FilledCurve, MathLabel,
+                    Point, RasterField, RightAngleMark, Scene, Vector)
 
 
 def geometry_extents(scene: Scene) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -30,6 +30,17 @@ def geometry_extents(scene: Scene) -> tuple[tuple[float, float], tuple[float, fl
         elif isinstance(it, MathLabel):
             xs.append(it.anchor[0])
             ys.append(it.anchor[1])
+        elif isinstance(it, Brace):
+            mid, _, n, d = it.frame()
+            apex = mid + d * n
+            xs.extend([it.p1[0], it.p2[0], float(apex[0])])
+            ys.extend([it.p1[1], it.p2[1], float(apex[1])])
+        elif isinstance(it, Callout):
+            xs.extend([it.anchor[0], it.target[0]])
+            ys.extend([it.anchor[1], it.target[1]])
+        elif isinstance(it, RasterField):
+            xs.extend(it.extent[0:2])
+            ys.extend(it.extent[2:4])
     if scene.xlim is not None:
         xlim = scene.xlim
     else:

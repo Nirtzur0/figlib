@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .scene import Curve, FilledCurve
+from .scene import Curve, FilledCurve, MathLabel, Vector
 from .style import Role
 
 
@@ -103,3 +103,170 @@ def compose(*groups: list[tuple[float, object]]) -> list:
     merged = [pair for g in groups for pair in g]
     merged.sort(key=lambda p: p[0])
     return [item for _, item in merged]
+
+
+@dataclass
+class _DepthBuffer:
+    """Screen-space nearest-depth raster; -inf where no surface projects."""
+    buf: np.ndarray                # (ny, nx)
+    origin: tuple[float, float]    # screen coords of cell (0, 0) corner
+    cell: float
+
+    def lookup(self, pts2: np.ndarray) -> np.ndarray:
+        ix = np.clip(((pts2[:, 0] - self.origin[0]) / self.cell).astype(int),
+                     0, self.buf.shape[1] - 1)
+        iy = np.clip(((pts2[:, 1] - self.origin[1]) / self.cell).astype(int),
+                     0, self.buf.shape[0] - 1)
+        return self.buf[iy, ix]
+
+
+def _depth_buffer(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, cam: Camera,
+                  grid: int = 256) -> _DepthBuffer:
+    """Rasterize the projected quads' depths (two triangles each, barycentric
+    interpolation at cell centers, nearest wins). O(quads x cells-per-quad)."""
+    n, m = Z.shape
+    pts3 = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])
+    pts2, depth = project(pts3, cam)
+    P = pts2.reshape(n, m, 2)
+    D = depth.reshape(n, m)
+    x0, y0 = pts2.min(axis=0)
+    x1, y1 = pts2.max(axis=0)
+    cell = max(x1 - x0, y1 - y0, 1e-12) / grid
+    nx = int(np.ceil((x1 - x0) / cell)) + 1
+    ny = int(np.ceil((y1 - y0) / cell)) + 1
+    buf = np.full((ny, nx), -np.inf)
+
+    def raster_tri(p0, p1, p2, z0, z1, z2):
+        e1, e2 = p1 - p0, p2 - p0
+        area = e1[0] * e2[1] - e1[1] * e2[0]
+        if abs(area) < 1e-15:
+            return
+        lo = np.minimum(np.minimum(p0, p1), p2)
+        hi = np.maximum(np.maximum(p0, p1), p2)
+        i0 = max(int((lo[0] - x0) / cell), 0)
+        i1 = min(int((hi[0] - x0) / cell) + 1, nx)
+        j0 = max(int((lo[1] - y0) / cell), 0)
+        j1 = min(int((hi[1] - y0) / cell) + 1, ny)
+        if i0 >= i1 or j0 >= j1:
+            return
+        cx = x0 + (np.arange(i0, i1) + 0.5) * cell
+        cy = y0 + (np.arange(j0, j1) + 0.5) * cell
+        gx, gy = np.meshgrid(cx, cy)
+        rx, ry = gx - p0[0], gy - p0[1]
+        w1 = (rx * e2[1] - ry * e2[0]) / area   # cross(r, e2) / cross(e1, e2)
+        w2 = (e1[0] * ry - e1[1] * rx) / area   # cross(e1, r) / cross(e1, e2)
+        w0 = 1.0 - w1 - w2
+        eps = -0.05  # slight overdraw so edge cells are covered
+        inside = (w0 >= eps) & (w1 >= eps) & (w2 >= eps)
+        z = w0 * z0 + w1 * z1 + w2 * z2
+        sub = buf[j0:j1, i0:i1]
+        np.maximum(sub, np.where(inside, z, -np.inf), out=sub)
+
+    for i in range(n - 1):
+        for j in range(m - 1):
+            a, b, c, d = P[i, j], P[i + 1, j], P[i + 1, j + 1], P[i, j + 1]
+            za, zb, zc, zd = D[i, j], D[i + 1, j], D[i + 1, j + 1], D[i, j + 1]
+            raster_tri(a, b, c, za, zb, zc)
+            raster_tri(a, c, d, za, zc, zd)
+    return _DepthBuffer(buf, (float(x0), float(y0)), float(cell))
+
+
+def _quad_depth_spread(D: np.ndarray) -> float:
+    """Max corner-depth range over quads — bounds the z-buffer interpolation
+    error for a sample lying on the surface itself."""
+    di = np.abs(np.diff(D, axis=0))
+    dj = np.abs(np.diff(D, axis=1))
+    return float(max(di.max(initial=0.0), dj.max(initial=0.0),
+                     np.abs(D[1:, 1:] - D[:-1, :-1]).max(initial=0.0)))
+
+
+def wireframe_items(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, cam: Camera,
+                    stride: tuple[int, int] = (1, 1), hidden: str | None = None,
+                    grid: int = 256, tol: float | None = None,
+                    depth_bias: float = 0.04, **curve_kw) -> list[tuple[float, Curve]]:
+    """u- and v-isolines with hidden-line removal against the surface itself.
+
+    A segment is hidden iff its midpoint depth < z-buffer depth at its screen
+    cell - tol (tol defaults to the max per-quad depth spread, so a sample on
+    the surface never occludes itself). hidden=None drops hidden segments;
+    a dash spec (e.g. "dashed") keeps them dashed and muted.
+    """
+    db = _depth_buffer(X, Y, Z, cam, grid)
+    n, m = Z.shape
+    pts3 = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])
+    pts2, depth = project(pts3, cam)
+    P = pts2.reshape(n, m, 2)
+    D = depth.reshape(n, m)
+    if tol is None:
+        tol = 1.001 * _quad_depth_spread(D) + 1e-9
+
+    def lines(idx: range, count: int):
+        out = sorted(set(idx) | {count - 1})
+        return out
+
+    items: list[tuple[float, Curve]] = []
+
+    def emit(p2_line: np.ndarray, d_line: np.ndarray) -> None:
+        mid2 = 0.5 * (p2_line[:-1] + p2_line[1:])
+        midd = 0.5 * (d_line[:-1] + d_line[1:])
+        occluded = midd < db.lookup(mid2) - tol
+        for k in range(len(mid2)):
+            seg = p2_line[k:k + 2]
+            if not occluded[k]:
+                items.append((float(midd[k]) + depth_bias, Curve(seg, **curve_kw)))
+            elif hidden is not None:
+                kw = dict(curve_kw)
+                kw["dash"] = hidden
+                kw["opacity"] = kw.get("opacity", 1.0) * 0.85
+                kw["width_scale"] = kw.get("width_scale", 1.0) * 0.9
+                items.append((float(midd[k]), Curve(seg, **kw)))
+
+    for i in lines(range(0, n, stride[0]), n):
+        emit(P[i, :], D[i, :])
+    for j in lines(range(0, m, stride[1]), m):
+        emit(P[:, j], D[:, j])
+    return items
+
+
+def label3(latex: str, anchor3, cam: Camera, **label_kw) -> MathLabel:
+    """A MathLabel anchored at a world-space point.
+
+    Replaces the project-unpack-relabel idiom: the anchor is projected
+    here, and everything else (ha/va/offset_px/role/size_pt) passes
+    through to MathLabel unchanged. offset_px stays canvas px, +y down.
+    """
+    (p2,), _ = project(np.asarray([anchor3], dtype=float), cam)
+    return MathLabel(latex, (float(p2[0]), float(p2[1])), **label_kw)
+
+
+def vector3(tail3, tip3, cam: Camera, **vector_kw) -> Vector:
+    """A Vector with world-space endpoints, projected at build time."""
+    (t2, p2), _ = project(np.asarray([tail3, tip3], dtype=float), cam)
+    return Vector((float(t2[0]), float(t2[1])), (float(p2[0]), float(p2[1])),
+                  **vector_kw)
+
+
+def as_floor(group: list[tuple[float, object]]) -> list[tuple[float, object]]:
+    """Force a depth-tagged group behind everything in compose() — the
+    ground-plane idiom, without magic depth constants in figure programs."""
+    return [(-math.inf, it) for _, it in group]
+
+
+def drop_shadow(pts3: np.ndarray, cam: Camera, z0: float = 0.0,
+                opacity: float = 0.16, color: str | None = None,
+                role: Role = Role.MUTED) -> list[tuple[float, FilledCurve]]:
+    """Contact shadow: the convex hull of the geometry's vertical footprint
+    on the plane z=z0, projected and depth-tagged strictly behind every
+    point of the geometry — the cue that places a floating object ON its
+    floor (compose() after as_floor ground, before the object)."""
+    from scipy.spatial import ConvexHull
+
+    pts3 = np.asarray(pts3, dtype=float)
+    foot = pts3[ConvexHull(pts3[:, :2]).vertices, :2]
+    shadow3 = np.column_stack([foot, np.full(len(foot), z0)])
+    pts2, depth = project(shadow3, cam)
+    # min footprint depth <= min object depth (same xy, z above the floor
+    # for elev > 0), so this tag paints before every object quad
+    tag = float(depth.min()) - 1e-3 * (float(np.ptp(depth)) + 1e-9)
+    return [(tag, FilledCurve(pts2, role=role, opacity=opacity,
+                              outline=False, color=color))]

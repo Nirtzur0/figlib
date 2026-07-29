@@ -7,6 +7,7 @@ layout.Transform ever converts to canvas pixels.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 
@@ -31,6 +32,17 @@ class Curve:
     arrows: tuple[float, ...] = ()
     arrow_style: str = "filled"    # filled | hollow
     arrow_scale: float = 1.0
+    # width multipliers sampled at equal arc-length fractions, linearly
+    # interpolated along the curve (x ink.width x width_scale). Renders as
+    # a filled offset polygon; dash is ignored when set.
+    width_profile: tuple[float, ...] | None = None
+    # stroke-linecap override; None -> the default round. Ramp segments use
+    # "butt" so translucent joints don't double-draw.
+    cap: str | None = None
+    # paper-colored under-stroke: this curve reads as passing OVER whatever
+    # was drawn before it (cartographic casing). Skipped on transparent
+    # themes; ignored with width_profile.
+    casing: bool = False
 
 
 @dataclass
@@ -42,6 +54,14 @@ class FilledCurve:
     color: str | None = None       # fill override
     edge_color: str | None = None  # stroke override (used by 3D shading)
     edge_width: float | None = None
+    # texture instead of tint: "stipple" | "hatch" | "crosshatch". Tile ink
+    # in the resolved fill color on a TRANSPARENT ground (paper shows
+    # through), so monochrome themes keep regions distinguishable; opacity
+    # does not apply — texture is ink, not a wash.
+    pattern: str | None = None
+    # interior boundaries, each (N, 2) closed implicitly: one path with
+    # multiple subpaths and fill-rule evenodd; outline strokes all of them
+    holes: tuple[np.ndarray, ...] = ()
 
 
 @dataclass
@@ -72,7 +92,15 @@ class MathLabel:
     size_pt: float | None = None   # None -> style.label_size_pt
     ha: str = "left"               # left | center | right
     va: str = "base"               # top | center | base | bottom
-    offset_px: XY = (0.0, 0.0)     # nudge in canvas px, +y down
+    # nudge in canvas px. CAUTION: +y moves DOWN (canvas frame), the
+    # opposite of the math-coords y the anchor lives in.
+    offset_px: XY = (0.0, 0.0)
+    # rotation about the (offset) anchor, degrees CCW on the page —
+    # covers text-along-a-curve; the gate boxes the rotated rect's AABB
+    angle_deg: float = 0.0
+    # paper-colored casing behind the glyphs so the label stays legible on
+    # busy ink (cartographic halo). Skipped on transparent themes.
+    halo: bool = False
 
 
 @dataclass
@@ -93,7 +121,63 @@ class AngleMark:
     role: Role = Role.ANNOTATION
 
 
-Item = Curve | FilledCurve | Vector | Point | MathLabel | RightAngleMark | AngleMark
+@dataclass
+class Brace:
+    """Curly brace spanning p1 -> p2 (a measured length), bulging to the
+    left of the p1->p2 direction when side > 0, right when side < 0; the
+    label is typeset just past the center cusp."""
+    p1: XY
+    p2: XY
+    side: float = 1.0
+    depth: float | None = None     # math units; None -> 6% of the span
+    label: str | None = None
+    role: Role = Role.ANNOTATION
+
+    def frame(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        """(midpoint, unit tangent, unit normal toward the bulge, depth) —
+        the one place the brace's geometry is defined; layout and render
+        both derive from it."""
+        p1 = np.asarray(self.p1, dtype=float)
+        p2 = np.asarray(self.p2, dtype=float)
+        v = p2 - p1
+        span = float(np.hypot(*v)) or 1.0
+        u = v / span
+        n = np.array([-u[1], u[0]]) * (1.0 if self.side >= 0 else -1.0)
+        d = self.depth if self.depth is not None else 0.06 * span
+        return (p1 + p2) / 2.0, u, n, d
+
+
+@dataclass
+class Callout:
+    """Boxed label with a leader: rounded paper-filled rect centered at
+    anchor, straight leader from the box edge nearest target, small filled
+    arrowhead at target."""
+    latex: str
+    anchor: XY
+    target: XY
+    role: Role = Role.ANNOTATION
+    boxed: bool = True
+    size_pt: float | None = None
+
+
+@dataclass
+class RasterField:
+    """Dense scalar field embedded as an image — the honest encoding when
+    there is no vector substitute at the density (attention maps, loss
+    landscapes, PDE fields). values (H, W) are normalized over
+    [vmin, vmax] and mapped through ramp (default: the theme's ramp, else
+    gray); row 0 renders at the TOP of extent (y = y1)."""
+    values: np.ndarray
+    extent: tuple[float, float, float, float]   # (x0, x1, y0, y1)
+    ramp: Callable[[float], str] | None = None
+    vmin: float | None = None
+    vmax: float | None = None
+    opacity: float = 1.0
+    interp: bool = False           # False -> image-rendering: pixelated
+
+
+Item = (Curve | FilledCurve | Vector | Point | MathLabel | RightAngleMark
+        | AngleMark | Brace | Callout | RasterField)
 
 
 @dataclass
@@ -104,6 +188,12 @@ class Scene:
     # None -> equal aspect (geometry in the plane); a float -> canvas
     # height in px, axes scaled independently (e.g. (t, x) plots)
     height_px: float | None = None
+    # clip every item: "frame" -> the xlim/ylim rect; clip_pts -> a closed
+    # polygon in math coords (disc portraits). Rendered as one SVG
+    # <clipPath> around the scene's item group; extents honor xlim/ylim
+    # exactly as without clipping.
+    clip: str | None = None
+    clip_pts: np.ndarray | None = None
 
     def add(self, *items: Item) -> None:
         self.items.extend(items)

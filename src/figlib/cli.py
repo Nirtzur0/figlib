@@ -24,10 +24,17 @@ def main(argv: list[str] | None = None) -> int:
                     help="print the cold-reader prompt for the rendered PNG")
     ap.add_argument("--transparent", action="store_true",
                     help="render with no paper/grain; SVG+PNG keep alpha")
+    ap.add_argument("--report", action="store_true",
+                    help="print a textual scene inventory (label bboxes, "
+                         "geometry extents, margins) for layout debugging")
     args = ap.parse_args(argv)
 
     report = run(args.program, width_px=args.width, transparent=args.transparent)
     print(report.summary())
+    if args.report:
+        from .report import report as layout_report
+        print("\n--- layout report ---")
+        print(layout_report(report.built, report.style, report.width_px))
     if args.readback_prompt:
         print("\n--- readback prompt ---")
         print(prompt_for(report.png_path))

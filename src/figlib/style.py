@@ -37,18 +37,55 @@ class Style:
     arrowhead_len: float = 10.0
     arrowhead_halfwidth: float = 3.6
     background: str = "white"
+    # casing thickness in px added on EACH side of a haloed label's glyphs
+    # or a cased curve's stroke
+    halo_width: float = 2.4
     # named dash levels: dash as identity, orthogonal to role
     dash_patterns: dict[str, str] = field(default_factory=lambda: {
         "solid": "", "dashed": "6 4.5", "dotted": "0.1 4"})
+    # cumulative scaled() factor; explicit per-item size_pt (authored in
+    # reading-size points) multiplies through label_pt()
+    type_scale: float = 1.0
 
     def ink(self, role: Role) -> Ink:
         return self.inks[role]
+
+    def label_pt(self, explicit: float | None) -> float:
+        """Resolve a label's size: explicit sizes are reading-size pt and
+        scale with the format's ink scale, like the default."""
+        return explicit * self.type_scale if explicit else self.label_size_pt
 
     def dash(self, spec: str) -> str | None:
         """Resolve a semantic dash name or pass a raw dasharray through."""
         if spec in self.dash_patterns:
             return self.dash_patterns[spec] or None
         return spec
+
+    def scaled(self, k: float) -> "Style":
+        """Every absolute quantity — type, stroke, heads, dots, dash
+        periods — multiplied by k. Formats read below their declared
+        width use this to keep ink at reading-size (format.ink_scale);
+        proportions within the figure are untouched."""
+        if k == 1.0:
+            return self
+        from dataclasses import replace
+
+        def _dash(d: str) -> str:
+            return " ".join(f"{float(v) * k:g}" for v in d.split())
+
+        return replace(
+            self,
+            inks={r: Ink(i.color, i.width * k, _dash(i.dash) if i.dash else None)
+                  for r, i in self.inks.items()},
+            label_size_pt=self.label_size_pt * k,
+            point_radius=self.point_radius * k,
+            arrowhead_len=self.arrowhead_len * k,
+            arrowhead_halfwidth=self.arrowhead_halfwidth * k,
+            halo_width=self.halo_width * k,
+            dash_patterns={name: _dash(d) if d else d
+                           for name, d in self.dash_patterns.items()},
+            type_scale=self.type_scale * k,
+        )
 
 
 DEFAULT_STYLE = Style(
