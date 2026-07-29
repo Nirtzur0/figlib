@@ -72,6 +72,22 @@ Semantic channels a theme must provide (this is the whole interface):
 | `surface_shade(t)` | 3D facet lighting → color | the volcano ramp |
 | `paper`, `grain` | ground and texture | riso cream + speckle |
 
+**No ground by default.** `Style.transparent` is `True`: a render emits ink
+on alpha, no paper rect, no page-wide grain overlay. A figure is meant to land
+on whatever document embeds it, and the ground is that document's decision.
+Two things are *not* ground and survive: grain inside a fill
+(`FilledCurve.grain`), and the paper-coloured erasers — casings, halos,
+hollow marker fills, callout backing. An eraser needs an opaque colour to
+be an eraser, so groundless it paints white (`render._ground`), matching the
+hostile ground `paper_stops()` already assumes. Cost: embed on a dark page
+and those read as white patches. The colour-free fix is an alpha knockout
+mask, which the renderer does not do yet.
+To get the theme's own ground back: `opaque_variant(THEME)`, the prebuilt
+`RISO_PAPER` / `CLEAN_PAPER`, or `figcheck --paper`. A `--paper` render
+writes `<name>_paper.svg`, and `--regress` picks that variant up iff such a
+baseline is committed. The contrast gate assumes white under a groundless
+render — the hostile case for light ink.
+
 Rules: hue = correspondence, lightness = order, accent = the
 distinguished object, never decoration (see grammar.md). A theme changes
 *which* colors carry those channels, never *what* the channels mean.

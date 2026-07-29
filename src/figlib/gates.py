@@ -16,10 +16,7 @@ from .layout import Transform
 from .render import brace_ink, callout_ink
 from .scene import Brace, Callout, Curve, MathLabel, Point, Scene, Vector
 from .style import Role, Style
-from .typeset import render_math
-
-# Fraction of a label's height assumed to hang below the baseline.
-_DESCENT_FRAC = 0.2
+from .typeset import label_box, render_math
 
 
 @dataclass(frozen=True)
@@ -46,21 +43,7 @@ LabelBox = tuple[str, float, tuple[float, float, float, float]]
 def _box_at(latex: str, size_pt: float, x: float, y: float,
             ha: str, va: str) -> tuple[float, float, float, float]:
     """Exact typeset bbox anchored at canvas (x, y)."""
-    m = render_math(latex, size_pt)
-    w, h = m.width_px, m.height_px
-    if ha == "center":
-        x -= w / 2
-    elif ha == "right":
-        x -= w
-    if va == "base":
-        y0 = y - h * (1 - _DESCENT_FRAC)
-    elif va == "top":
-        y0 = y
-    elif va == "center":
-        y0 = y - h / 2
-    else:  # bottom
-        y0 = y - h
-    return (x, y0, x + w, y0 + h)
+    return label_box(latex, size_pt, x, y, ha, va)
 
 
 def _rotate_box(box: tuple[float, float, float, float], cx: float, cy: float,
@@ -378,17 +361,25 @@ def _label_ink_checks(entries: list[LabelEntry], corridors: list[Corridor],
     ink-free region center when no single-axis nudge exists."""
     diags: list[Diagnostic] = []
     boxes = [box for box, _ in entries]
+    # halo only earns the exemption when a casing is actually painted. With
+    # no ground there is none, so the declaration buys nothing and the label
+    # has to be placed clear of the ink like any other.
+    halo_exempts = not getattr(style, "transparent", False)
     for k, ((latex, _, box), owner) in enumerate(entries):
-        if owner is not None and (getattr(owner, "halo", False)
+        if owner is not None and ((halo_exempts and getattr(owner, "halo", False))
                                   or (isinstance(owner, Callout) and owner.boxed)):
             continue
         hit = corridor_hit(box, corridors)
         if hit is None:
             continue
+        # only offer the casing route when a casing would actually paint;
+        # on a groundless render halo=True is a no-op and would be a fix
+        # that changes nothing.
+        ride = ", or declare halo=True" if halo_exempts else ""
         nudges = _corridor_free_nudges(k, boxes, corridors, canvas_w, canvas_h)
         if nudges:
             opts = " or ".join(_fmt_nudge(d) for d in nudges)
-            fix = f" — free: offset_px += {opts}, or declare halo=True"
+            fix = f" — free: offset_px += {opts}{ride}"
         else:
             center = _nearest_free_center(box,
                                           [b[2] for i, b in enumerate(boxes) if i != k],
@@ -398,12 +389,11 @@ def _label_ink_checks(entries: list[LabelEntry], corridors: list[Corridor],
             elif to_math is not None:
                 mx, my = to_math(center)
                 fix = (f" — no free single-axis nudge; nearest ink-free region "
-                       f"center ({mx:.3g}, {my:.3g}) in math coords, or "
-                       f"declare halo=True")
+                       f"center ({mx:.3g}, {my:.3g}) in math coords{ride}")
             else:
                 fix = (f" — no free single-axis nudge; nearest ink-free region "
-                       f"center ({center[0]:.0f}, {center[1]:.0f}) canvas px, "
-                       f"or declare halo=True")
+                       f"center ({center[0]:.0f}, {center[1]:.0f}) canvas px"
+                       f"{ride}")
         diags.append(Diagnostic(
             "label-on-ink",
             f"'{latex}' sits on {hit.what} ink{fix}"))

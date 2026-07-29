@@ -163,7 +163,9 @@ that, each general (a profile/callable, never a device):
 - **casing**: paper-colored under-strokes. `MathLabel.halo` keeps a
   label legible on busy ink (never mutate shared glyph `<symbol>`s —
   stroke the `<use>`); `Curve.casing` makes a curve read as passing
-  OVER earlier ink. Both skipped on transparent themes. This is the
+  OVER earlier ink. On a groundless render (the default) they have no
+  paper to borrow and paint white — the same ground the contrast gate
+  assumes. This is the
   channel that breaks the density–legibility tradeoff: annotation load
   can rise without clarity falling.
 

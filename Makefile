@@ -8,7 +8,7 @@ help:
 	@echo 'make check F=figures/x.py      render + all deterministic gates'
 	@echo '  F may carry flags: F="figures/x.py --report"'
 	@echo '  flags: --report --zoom X0,Y0,X1,Y1[:S] --readback-prompt'
-	@echo '         --transparent --no-autoplace --width PX'
+	@echo '         --paper --no-autoplace --width PX'
 	@echo 'make regress                   corpus golden diff (exit 1 on drift)'
 	@echo 'make update [F=figures/x.py]   refresh committed svg+png baselines'
 

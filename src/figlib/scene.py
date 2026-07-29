@@ -95,7 +95,7 @@ class FilledCurve:
     # gradient fill paint (overrides color); axis in math coords
     gradient: Gradient | None = None
     # grain INSIDE the fill: 0 = none, else opacity of the grain tile
-    # overlaid on this shape (skipped on transparent themes)
+    # overlaid on this shape (survives a transparent render — grain is ink)
     grain: float = 0.0
     # correspondence name: the marks that ARE the same object across the
     # parts of a composite figure share a key. Renders nothing; it is what

@@ -47,6 +47,13 @@ class Style:
     arrowhead_len: float = 10.0
     arrowhead_halfwidth: float = 3.6
     background: str = "white"
+    # No ground: no paper rect, no grain, no casing/halo (a halo painted in
+    # the background colour is an opaque blob once the ground is gone), and
+    # the SVG/PNG keep alpha. This is the DEFAULT — a figure is ink meant to
+    # land on whatever page embeds it, and a baked-in ground is the one
+    # decision the embedding document is entitled to make. Opt into the
+    # theme's paper with `opaque_variant(theme)` or `figcheck --paper`.
+    transparent: bool = True
     # casing thickness in px added on EACH side of a haloed label's glyphs
     # or a cased curve's stroke
     halo_width: float = 2.4

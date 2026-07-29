@@ -106,8 +106,6 @@ class Theme(Style):
     correspondence_cap: int = 3
     # film grain overlay opacity; 0 disables
     grain: float = 0.0
-    # no paper rect, no grain; SVG/PNG keep alpha for embedding in documents
-    transparent: bool = False
 
     # --- cyclic phase channel (domain coloring) ---------------------------
     # A *periodic* quantity cannot ride the ordered ramp: arg = -pi and
@@ -267,7 +265,7 @@ def _from_style(style: Style, **kw) -> dict:
     return dict(inks=style.inks, label_size_pt=style.label_size_pt,
                 point_radius=style.point_radius, arrowhead_len=style.arrowhead_len,
                 arrowhead_halfwidth=style.arrowhead_halfwidth,
-                background=style.background, **kw)
+                background=style.background, transparent=style.transparent, **kw)
 
 
 CLEAN = Theme(**_from_style(DEFAULT_STYLE))
@@ -328,13 +326,25 @@ RISO = Theme(
 
 
 def transparent_variant(theme: Theme) -> Theme:
-    """The same ink and palettes, no paper — for embedding in other work."""
+    """The same ink and palettes, no paper — the default; kept as an
+    explicit spelling for code that wants to force it."""
     from dataclasses import replace
     return replace(theme, transparent=True)
 
 
-RISO_T = transparent_variant(RISO)
-CLEAN_T = transparent_variant(CLEAN)
+def opaque_variant(theme: Theme) -> Theme:
+    """The theme's own ground: paper gradient, grain, casings and halos.
+    Opt-in, for a figure that stands alone rather than embedding."""
+    from dataclasses import replace
+    return replace(theme, transparent=False)
+
+
+RISO_PAPER = opaque_variant(RISO)
+CLEAN_PAPER = opaque_variant(CLEAN)
+
+# Back-compat: transparency is now the default, so these are the base themes.
+RISO_T = RISO
+CLEAN_T = CLEAN
 
 
 def grain_tile_datauri(size: int = 140, seed: int = 11) -> str:

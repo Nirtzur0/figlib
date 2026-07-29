@@ -1,8 +1,18 @@
+---
+name: scientific-figures
+description: Use when creating any figure, diagram, plot, or illustration for mathematical, scientific, or technical exposition — phase portraits, conformal maps, 3D surfaces, bifurcation diagrams, schematics, vector fields, series geometry, panel comparisons. Triggers on "make a figure for X", "draw/plot/illustrate X", "I need a diagram of X", "figure for the paper/post/notes". Builds it as a gated figlib program (compute → Scene → assertions → gates → readback), NOT as an ad-hoc matplotlib script. Works from any directory; the figure lands in the project you are standing in.
+---
+
 # Writing a figure (the router)
 
-The model-facing entry point. This file is deliberately short: it tells
-you the contract, the loop, and where to look — it does not repeat the
-theory. Read on demand:
+The model-facing entry point, and the single source of the contract: this
+file IS `~/.claude/skills/scientific-figures/SKILL.md` (symlinked, and
+again into `~/.codex/skills/`). Edit it here, in the repo, where it is
+version-controlled.
+
+It is deliberately short — the contract, the loop, and where to look. It
+does not repeat the theory. Read on demand (siblings in `docs/` when you
+are in this repo; `references/` when you are running as the skill):
 
 - **architecture.md** — the stack and the design step (0–9). Read the
   design step *before* writing any code, every time.
@@ -12,6 +22,24 @@ theory. Read on demand:
   read when a step feels arbitrary.
 - **primitive-gaps.md** — maintainer-facing build order. Not needed to
   write a figure.
+
+A figure is a **program**, not a picture. Do not reach for
+matplotlib/seaborn/tikz. If a figure is worth making it is worth gating.
+
+## Where you are
+
+**Inside this repo** — the figure joins the corpus: `figures/<name>.py`,
+baselines committed to `figures/out/`, `make regress` corpus-wide. Use the
+make targets.
+
+**Anywhere else** — `figlib` is installed as a global editable uv tool, so
+the host project needs **no dependency on it**: no `pyproject.toml` edit,
+no venv change: `figcheck` loads the figure program into its own
+environment. Author into the project you are standing in —
+`<project>/figures/<name>.py`, outputs written to `<project>/figures/out/`
+(derived from the program's own directory, so any location works; match
+whatever asset directory the host project already uses). Golden baselines
+are per-project via `--figures-dir`.
 
 ## The contract
 
@@ -34,6 +62,8 @@ shrink type.
 
 ## The loop
 
+In this repo:
+
 ```
 make check F=figures/<name>.py             # render + all deterministic gates
 make check F="figures/<name>.py --report"  # textual layout inventory
@@ -41,10 +71,25 @@ make regress                               # corpus golden diff (exit 1 on drift
 make update [F=figures/<name>.py]          # refresh committed SVG+PNG baselines
 ```
 
-Bare `figcheck` is not on PATH and a raw `uv run figcheck` misses the
-cairo library path; the Makefile exports it. The raw escape hatch, for
-flags the targets don't pass through, is
+The Makefile exports the cairo library path; a raw `uv run figcheck`
+misses it. The escape hatch, for flags the targets don't pass through, is
 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uv run figcheck <args>`.
+
+In any other project, the same flags via the globally installed tool
+(`~/.local/bin/figcheck` wraps the cairo path, so no prefix is needed):
+
+```
+figcheck figures/<name>.py [--report|--zoom x0,y0,x1,y1:4|--readback-prompt]
+figcheck --regress --figures-dir figures   # golden diff over THIS project
+figcheck --update  --figures-dir figures   # refresh its baselines
+```
+
+If that fails with an opaque cairo error, `uv tool install --force` has
+replaced the wrapper with a bare symlink — `rm ~/.local/bin/figcheck`
+first (writing through the symlink clobbers uv's real entry point and
+self-execs forever), then restore the two-line wrapper that exports
+`DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` and execs
+`~/.local/share/uv/tools/figlib/bin/figcheck "$@"`.
 
 `--regress` re-renders every figure and diffs the SVG text against
 `figures/out/`; on mismatch it rasterizes both and prints the changed-pixel
@@ -68,9 +113,6 @@ you change the renderer, run it, look at what moved, then `--update`.
 5. Comparative gate when a reference exists: judge sees original +
    recreation, rules BOOK BETTER / COMPARABLE / RECREATION BETTER with
    named defects. Iterate to at least COMPARABLE.
-
-Environment: cairo needs `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`
-(the Makefile encodes this).
 
 ## Conventions that bite
 
@@ -104,7 +146,8 @@ Environment: cairo needs `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`
 ## Device -> exemplar index
 
 Imitate the nearest exemplar; mutate, don't invent structure from
-scratch. Each of these passed the full gate stack.
+scratch. Each of these passed the full gate stack. From outside the repo,
+read them at `/Users/nirtzur/Documents/projects/sci-figures/figures/`.
 
 | device | exemplar |
 |---|---|
@@ -224,3 +267,12 @@ Read once; they apply to nearly every figure.
   invented brace read as an S-wave; the TeX construction read as a
   brace. Verify any new glyph with a zoomed crop (`--zoom`), then pin
   its shape in a test (path command counts).
+
+## Changing the library
+
+figlib is installed `--editable` from this repo, so edits to
+`src/figlib/` take effect immediately in the global `figcheck` — no
+reinstall. New primitives, themes, and gates belong here, with tests,
+never copied into a host project. After a library change run `make
+regress` in this repo before relying on it elsewhere: the corpus is the
+only place the change gets policed.

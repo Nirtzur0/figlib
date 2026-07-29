@@ -1,5 +1,7 @@
 """Core tests: typeset metrics, layout transform, SVG/PNG emission."""
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -8,6 +10,10 @@ from figlib.scene import Curve, MathLabel, Point, RightAngleMark, Scene, Vector
 from figlib.typeset import render_math
 from figlib.layout import Transform, geometry_extents
 from figlib.render import to_svg, save
+
+# Paper-coloured devices (hollow heads, casings, halos) exist only on a style
+# that owns its ground; the default style is groundless.
+PAPERED = dataclasses.replace(DEFAULT_STYLE, transparent=False)
 
 
 def make_scene() -> Scene:
@@ -76,12 +82,15 @@ class TestRender:
         assert svg_file.exists() and svg_file.stat().st_size > 500
         assert png_file.exists() and png_file.stat().st_size > 500
 
-    def test_transparent_theme_emits_no_background(self):
-        from figlib.theme import RISO, RISO_T
-        opaque = to_svg(make_scene(), RISO, width_px=900)
-        clear = to_svg(make_scene(), RISO_T, width_px=900)
-        assert "<rect" in opaque and "url(#grain)" in opaque
-        assert "<rect" not in clear and "grain" not in clear
+    def test_default_theme_emits_no_ground(self):
+        from figlib.theme import RISO, RISO_PAPER
+        papered = to_svg(make_scene(), RISO_PAPER, width_px=900)
+        clear = to_svg(make_scene(), RISO, width_px=900)
+        assert "url(#paper)" in papered and "url(#grain)" in papered
+        # groundless is the default: no paper rect, and no page-wide grain
+        # overlay either -- that overlay IS the paper's texture.
+        assert "url(#paper)" not in clear and RISO.background not in clear
+        assert "url(#grain)" not in clear
 
 
 class TestCurveMarkers:
@@ -106,9 +115,20 @@ class TestCurveMarkers:
         assert xy[1:, 0].max() < xy[0, 0]
 
     def test_hollow_marker_is_outlined(self):
+        # a hollow head is a paper-filled head, so it needs a style with paper
+        svg = to_svg(self._line_scene(arrows=(0.5,), arrow_style="hollow"),
+                     PAPERED, width_px=900)
+        assert 'fill="white"' in svg and "arrowhead" in svg
+
+    def test_hollow_marker_fills_white_without_ground(self):
+        """A hollow head reads as hollow by covering what it sits on, so it
+        keeps an opaque fill even groundless — white, the assumed page."""
+        import xml.etree.ElementTree as ET
         svg = to_svg(self._line_scene(arrows=(0.5,), arrow_style="hollow"),
                      DEFAULT_STYLE, width_px=900)
-        assert 'fill="white"' in svg and "arrowhead" in svg
+        heads = [e for e in ET.fromstring(svg).iter()
+                 if e.get("class") == "arrowhead"]
+        assert len(heads) == 1 and heads[0].get("fill") == "#ffffff"
 
     def test_closed_curve_marker_on_closing_segment(self):
         theta = np.linspace(0, 2 * np.pi, 100, endpoint=False)
@@ -137,5 +157,5 @@ class TestDashChannel:
 class TestGhostVector:
     def test_open_head_uses_background_fill(self):
         svg = to_svg(Scene(items=[Vector((0.0, 0.0), (1.0, 0.0), filled=False)],
-                           ylim=(-1, 1)), DEFAULT_STYLE)
+                           ylim=(-1, 1)), PAPERED)
         assert 'fill="white"' in svg and "arrowhead" in svg

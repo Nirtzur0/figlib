@@ -267,11 +267,16 @@ def build(g):
     # Style split per label: paper ink on the black cells (ground = fill),
     # haloed annotation ink beside them (ground = paper under curve ink).
     paper = THEME.paper[0]
+    # 3 and 4 flank the radially-compressed lens cells and land on the net's
+    # curve ink at their pinned anchor; a small vertical nudge (verified
+    # ink-free by the collision gate) clears it without moving the anchor.
+    orbit_nudges = {3: (0, 3), 4: (0, -3)}
     for k, (lx, ly, pt, on_dark) in enumerate(g["orbit_labels"]):
         s.add(MathLabel(str(k), (lx, ly), role=Role.ANNOTATION,
                         color=paper if on_dark else None,
                         ha="center", va="center", size_pt=pt,
-                        halo=not on_dark, pin=True))
+                        halo=not on_dark, pin=True,
+                        offset_px=orbit_nudges.get(k, (0, 0))))
 
     # pi/3 arc at xi+: one advance step, read against the drawn real axis
     d1, d2 = g["arc_dirs"]

@@ -10,7 +10,7 @@ import numpy as np
 
 from figlib.format import WIDE
 from figlib.geometry import cassinian_curves
-from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene, Vector
+from figlib.scene import AngleMark, Callout, Curve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
 from figlib.theme import CLEAN
 
@@ -107,7 +107,7 @@ def build(g):
                     ha="left", va="center", size_pt=9, role=Role.ANNOTATION))
     s.add(AngleMark((1.0, 0.0), (1.0, 0.0), d2, radius=0.22))
     a2 = np.arctan2(d2[1], d2[0])
-    s.add(MathLabel(r"\theta_2", (1.0 + 0.30 * np.cos(a2 / 2), 0.30 * np.sin(a2 / 2)),
+    s.add(MathLabel(r"\theta_2", (0.998, 0.0954), offset_px=(-9, 0),
                     ha="left", va="center", size_pt=9, role=Role.ANNOTATION,
                     halo=True))
 
@@ -130,24 +130,29 @@ def build(g):
     s.add(MathLabel(r"1", (W + 1.0, 0.0), ha="center", va="top", offset_px=(0, 9)))
     s.add(Point((W, 0.0), role=Role.CONTENT, radius_scale=0.7))
     s.add(MathLabel(r"0", (W, 0.0), ha="right", va="top", offset_px=(-5, 9)))
-    s.add(MathLabel(r"\text{foci} \mapsto \text{center}", (W + 1.0, 0.0), ha="center", va="top",
-                    offset_px=(0, 26), size_pt=9, role=Role.ANNOTATION,
-                    halo=True))
+    # This corner of the w-plane is genuinely oversubscribed: four
+    # annotations (center, image point, its radius, its angle) all refer
+    # to features packed inside one ring of concentric circles. Rather than
+    # nudge each in isolation and push the collision onto its neighbour,
+    # the two that cannot find room near their referent get a leader
+    # (Callout) into the ink-free band above/below the rings; the two that
+    # can stay close (the angle sum, and now the center) keep a plain label.
+    s.add(Callout(r"\text{foci} \mapsto \text{center}", anchor=(W + 1.02, -1.19),
+                  target=(W + 1.0, 0.0), size_pt=9, role=Role.ANNOTATION))
     w0 = z0 * z0
     s.add(Point((W + w0.real, w0.imag), role=Role.CONTENT, radius_scale=0.8))
-    s.add(MathLabel(r"w = z^2", (W + w0.real, w0.imag), ha="left", va="bottom",
-                    offset_px=(6, -5), halo=True))
+    s.add(Callout(r"w = z^2", anchor=(W + 0.03, 1.47),
+                  target=(W + w0.real, w0.imag)))
     # w - 1 = (z-1)(z+1): length r1 r2 = k^2, angle theta1 + theta2
     s.add(Curve(np.array([[W + 1.0, 0.0], [W + w0.real, w0.imag]]),
                 role=Role.CONSTRUCTION, width_scale=0.9))
     mw = ((1.0 + w0.real) / 2, w0.imag / 2)
-    s.add(MathLabel(r"r_1 r_2 = k^2", (W + mw[0], mw[1]), ha="center", va="bottom",
-                    offset_px=(14, -6), size_pt=10, role=Role.ANNOTATION,
-                    halo=True))
+    s.add(Callout(r"r_1 r_2 = k^2", anchor=(W + 0.94, 1.2),
+                  target=(W + mw[0], mw[1]), size_pt=10, role=Role.ANNOTATION))
     dw = (w0.real - 1.0, w0.imag)
     s.add(AngleMark((W + 1.0, 0.0), (1.0, 0.0), dw, radius=0.30))
     aw = np.arctan2(dw[1], dw[0])
-    s.add(MathLabel(r"\theta_1 + \theta_2", (W + 1.0 + 0.42 * np.cos(aw / 2), 0.42 * np.sin(aw / 2)),
+    s.add(MathLabel(r"\theta_1 + \theta_2", (W + 1.1, 0.0954), offset_px=(-26, 0),
                     ha="left", va="center", size_pt=9, role=Role.ANNOTATION,
                     halo=True))
 

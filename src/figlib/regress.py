@@ -63,12 +63,12 @@ def discover_programs(figures_dir: str | Path) -> list[Path]:
                   if not p.name.startswith("_"))
 
 
-def _render_to(program_path: Path, dest: Path, transparent: bool) -> Path:
+def _render_to(program_path: Path, dest: Path, paper: bool) -> Path:
     """Run the program into `dest`; return the SVG path. Raises on a failed
     gate so a broken figure cannot masquerade as a clean match."""
     from .program import run
 
-    report = run(program_path, out_dir=dest, transparent=transparent)
+    report = run(program_path, out_dir=dest, paper=paper)
     if not report.passed:
         kinds = "; ".join(f"{d.kind}: {d.detail}" for d in report.diagnostics)
         raise RuntimeError(f"gates failed -- {kinds}")
@@ -100,17 +100,17 @@ def _pixel_metrics(baseline_svg: Path, fresh_svg: Path) -> tuple[float, float, s
 
 
 def compare_figure(program_path: str | Path, out_dir: str | Path,
-                   transparent: bool = False) -> RegressResult:
+                   paper: bool = False) -> RegressResult:
     """Render `program_path` to scratch and compare against the committed
     SVG in `out_dir`. Pure with respect to `out_dir`: nothing is written."""
     program_path = Path(program_path)
     out_dir = Path(out_dir)
-    name = program_path.stem + ("_transparent" if transparent else "")
+    name = program_path.stem + ("_paper" if paper else "")
     baseline = out_dir / f"{name}.svg"
 
     with tempfile.TemporaryDirectory() as td:
         try:
-            fresh = _render_to(program_path, Path(td), transparent)
+            fresh = _render_to(program_path, Path(td), paper)
         except Exception:
             lines = traceback.format_exc().strip().splitlines()
             tail = " | ".join(ln.strip() for ln in lines[-2:])
@@ -130,8 +130,8 @@ def compare_figure(program_path: str | Path, out_dir: str | Path,
 
 def variants(program_path: Path, out_dir: Path) -> list[bool]:
     """Which renders the corpus commits for this program: always the plain
-    one, plus the transparent one iff a transparent baseline exists."""
-    if (out_dir / f"{program_path.stem}_transparent.svg").exists():
+    (groundless) one, plus the papered one iff a `_paper` baseline exists."""
+    if (out_dir / f"{program_path.stem}_paper.svg").exists():
         return [False, True]
     return [False]
 
@@ -141,7 +141,7 @@ def sweep(figures_dir: str | Path, out_dir: str | Path | None = None,
     figures_dir = Path(figures_dir)
     out = Path(out_dir) if out_dir else figures_dir / "out"
     paths = programs if programs is not None else discover_programs(figures_dir)
-    return [compare_figure(p, out, transparent=t)
+    return [compare_figure(p, out, paper=t)
             for p in paths for t in variants(p, out)]
 
 

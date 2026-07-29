@@ -135,11 +135,13 @@ def test_fill_grain_skipped_when_zero():
     assert 'fill="url(#grain)"' not in svg
 
 
-def test_fill_grain_skipped_on_transparent_theme():
-    from figlib.theme import RISO_T
+def test_fill_grain_survives_a_groundless_theme():
+    """Grain is ink, not ground: alpha speckle composites onto whatever page
+    embeds the figure, so dropping the paper must not drop the grain."""
+    from figlib.theme import RISO
     svg = _svg_of([FilledCurve(_TRI, color="#c0504d", opacity=1.0, grain=0.4)],
-                  style=RISO_T)
-    assert 'fill="url(#grain)"' not in svg
+                  style=RISO)
+    assert 'fill="url(#grain)"' in svg
 
 
 def test_expressivity_counts_gradient_channel():

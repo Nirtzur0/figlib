@@ -74,18 +74,33 @@ class TestLabelOnInk:
         assert lab.offset_px == (0.0, 0.0)
         assert "label-on-ink" in _kinds(mechanical(scene, DEFAULT_STYLE))
 
-    def test_halo_declares_the_ride_and_exempts(self):
+    def test_halo_declares_the_ride_and_exempts_on_paper(self):
         # halo=True is the author saying "this label rides busy ink" — the
         # cartographic-halo idiom; the gate polices the UNMARKED case
+        from figlib.theme import CLEAN, opaque_variant
+        paper = opaque_variant(CLEAN)
         haloed = self._label(halo=True)
         scene = _diagonal_scene(haloed)
-        assert "label-on-ink" not in _kinds(mechanical(scene, DEFAULT_STYLE))
-        assert autoplace(scene, DEFAULT_STYLE) == []     # not nudged either
+        assert "label-on-ink" not in _kinds(mechanical(scene, paper))
+        assert autoplace(scene, paper) == []             # not nudged either
         assert haloed.offset_px == (0.0, 0.0)
 
-    def test_bare_label_diagnostic_offers_the_halo_route(self):
+    def test_halo_does_not_exempt_when_groundless(self):
+        """No ground, no casing — so the declaration buys nothing and the
+        label must be placed clear like any other. The gate must not stay
+        silent about ink it is no longer covering."""
+        scene = _diagonal_scene(self._label(halo=True, pin=True))
+        assert DEFAULT_STYLE.transparent is True
+        hits = [d for d in mechanical(scene, DEFAULT_STYLE)
+                if d.kind == "label-on-ink"]
+        assert hits
+        assert "halo=True" not in hits[0].detail, \
+            "must not offer a casing that a groundless render won't paint"
+
+    def test_bare_label_diagnostic_offers_the_halo_route_on_paper(self):
+        from figlib.theme import CLEAN, opaque_variant
         diags = mechanical(_diagonal_scene(self._label(pin=True)),
-                           DEFAULT_STYLE)
+                           opaque_variant(CLEAN))
         hits = [d for d in diags if d.kind == "label-on-ink"]
         assert hits and "halo=True" in hits[0].detail
 

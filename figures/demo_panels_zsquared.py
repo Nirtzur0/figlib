@@ -114,8 +114,9 @@ def _panel(g, mapped: bool) -> Scene:
     # haloed: the radius label belongs ON the axis at the circle's foot
     # (contiguity), and at the shared page scale that spot carries grid ink
     s.add(MathLabel(r"r_0^2" if mapped else r"r_0", (circ0[0, 0], 0.0),
-                    ha="center", va="top", offset_px=(0, 8), role=Role.ACCENT2,
-                    halo=True, key="tracked-circle"))
+                    ha="center", va="top",
+                    offset_px=(13, -28) if mapped else (0, 8),
+                    role=Role.ACCENT2, halo=True, key="tracked-circle"))
     s.add(MathLabel(r"1", (1.0, 0.0), ha="center", va="top", offset_px=(8, 8),
                     key="fixed-1"))
     return s

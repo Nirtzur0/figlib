@@ -139,13 +139,13 @@ def build(g):
 
     s.add(MathLabel(r"dX_t = -\theta X_t\,dt + \sigma\,dW_t",
                     (2.62, 2.55), ha="center", va="center", size_pt=11,
-                    role=Role.ANNOTATION, halo=True))
+                    role=Role.ANNOTATION, halo=True, offset_px=(0, -11)))
     s.add(Callout(r"p_t(x)", anchor=(3.55, 1.95), target=(2.6, 0.42)))
     s.add(MathLabel(r"m(t) \pm 2\sigma(t)", (1.02, 1.72), ha="left",
                     va="bottom", size_pt=10, role=Role.ANNOTATION, halo=True,
-                    color=RISO.ink(Role.ACCENT1).color))
+                    color=RISO.ink(Role.ACCENT1).color, offset_px=(0, -29)))
     s.add(MathLabel(r"\pm 2\sigma_\infty,\quad \sigma_\infty^2 = \sigma^2/2\theta",
-                    (3.3, -two_sig), ha="center", va="top", offset_px=(0, 6),
+                    (3.3, -two_sig), ha="center", va="top", offset_px=(0, 19),
                     size_pt=10, role=Role.ANNOTATION, halo=True))
 
     # time arrow under the field

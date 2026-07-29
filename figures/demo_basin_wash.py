@@ -92,29 +92,36 @@ def build(g):
         ys = np.linspace(ya, 0.0, 120)
         s.add(Curve(np.column_stack([np.zeros_like(ys), ys]),
                     role=Role.ACCENT2, width_scale=WEIGHT_ACTOR,
-                    arrows=(0.45, 0.9), arrow_style="filled", casing=True))
+                    arrows=(0.45, 0.75), arrow_style="filled", casing=True))
 
     # fixed points: sinks filled, saddle hollow (the standard vocabulary)
     for (fx, fy) in g["fixed"]:
         s.add(Point((fx, fy), filled=not np.isclose(fx, 0.0), radius_scale=1.2))
 
-    s.add(MathLabel(r"\dot x = x - x^3,\ \ \dot y = -y", (-2.1, 1.22),
+    # the field's ODE, set as a floating caption (no referent to stay near):
+    # split across two lines so each is narrow enough to fit an ink-free
+    # pocket in the corner — the streamline family is dense enough that no
+    # single-line-width gap survives anywhere in the frame.
+    s.add(MathLabel(r"\dot x = x - x^3,", (-2.1, 1.30),
                     ha="left", va="center", size_pt=10.5,
-                    role=Role.ANNOTATION, halo=True))
-    s.add(MathLabel(r"W^s(0)", (0.0, -1.02), ha="left", va="center",
-                    offset_px=(7, 0), size_pt=11, halo=True,
+                    role=Role.ANNOTATION, halo=True, offset_px=(-8, 0)))
+    s.add(MathLabel(r"\dot y = -y", (-2.1, 1.14),
+                    ha="left", va="center", size_pt=10.5,
+                    role=Role.ANNOTATION, halo=True, offset_px=(0, 16)))
+    s.add(MathLabel(r"W^s(0)", (0.0, -0.45), ha="left", va="center",
+                    offset_px=(7, -32), size_pt=11, halo=True,
                     color=RISO.ink(Role.ACCENT2).color))
     s.add(MathLabel(r"x_-^* = -1", (-1.0, 0.0), ha="center", va="top",
-                    offset_px=(0, 10), size_pt=10, role=Role.ANNOTATION,
+                    offset_px=(-36, 10), size_pt=10, role=Role.ANNOTATION,
                     halo=True))
-    s.add(MathLabel(r"x_+^* = +1", (1.0, 0.0), ha="center", va="top",
-                    offset_px=(0, 10), size_pt=10, role=Role.ANNOTATION,
+    s.add(MathLabel(r"x_+^* = +1", (1.29, -0.128), ha="center", va="top",
+                    offset_px=(0, -3), size_pt=10, role=Role.ANNOTATION,
                     halo=True))
-    s.add(MathLabel(r"\mathrm{basin\ of\ } x_-^*", (-1.62, -1.16),
+    s.add(MathLabel(r"\mathrm{basin\ of\ } x_-^*", (-1.82, -1.28),
                     ha="center", va="center", size_pt=10,
                     role=Role.ANNOTATION, halo=True))
-    s.add(MathLabel(r"\mathrm{basin\ of\ } x_+^*", (1.62, 1.16),
-                    ha="center", va="center", size_pt=10,
+    s.add(MathLabel(r"\mathrm{basin\ of\ } x_+^*", (1.8, 0.978),
+                    ha="center", va="center", offset_px=(0, 1), size_pt=10,
                     role=Role.ANNOTATION, halo=True))
     return s
 

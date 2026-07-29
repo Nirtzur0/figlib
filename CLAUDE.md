@@ -9,6 +9,14 @@ correctness is enforced by gates, not by looking at the picture.
 It is the model-facing entry point and it is short. Everything below is
 routing.
 
+That file is also the `scientific-figures` skill: it is symlinked to
+`~/.claude/skills/scientific-figures/SKILL.md` and from there into
+`~/.codex/skills/`, so figures can be authored from any project on this
+machine (`figlib` is installed as a global editable uv tool; host projects
+take no dependency on it). The repo copy is canonical — edit it here.
+`~/.claude/skills/scientific-figures/references/*.md` are symlinks to
+`docs/`, so those propagate too.
+
 ## Read order
 
 | when | file |
@@ -54,7 +62,11 @@ make update                      refresh the committed svg+png baselines
 
 Raw form, if you need flags the targets don't pass through:
 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uv run figcheck <args>`.
-Bare `figcheck` is not on PATH.
+
+Outside this repo, `figcheck` IS on PATH — `~/.local/bin/figcheck` wraps
+the cairo path around the globally installed editable tool. Inside the
+repo prefer the make targets anyway: they run against the working tree
+and cover the corpus.
 
 ## The invariants (violating these is a bug, not a style choice)
 
@@ -62,6 +74,11 @@ Bare `figcheck` is not on PATH.
   meanings: `Role.CONTENT`, `theme.ramp(t)`, `theme.categorical(i)`,
   `theme.surface_shade(t)`. A hex literal in a figure means that figure
   silently stops retheming, and no gate will catch it.
+- **A figure has no ground.** `Style.transparent` defaults to `True`: ink on
+  alpha, no paper rect and no page-wide grain — the embedding document owns
+  the background. Grain inside a fill still renders. `figcheck --paper` (or
+  `opaque_variant(THEME)` / `RISO_PAPER`) puts the theme's paper back and
+  writes `<name>_paper.svg`.
 - **Canvas units are display CSS pixels.** A figure declares its page slot
   (`FORMAT = MARGIN | COLUMN | WIDE`) and every absolute quantity is at
   final rendered size. If annotation doesn't fit, take a larger format or

@@ -61,13 +61,23 @@ def _arrowhead(tip: tuple[float, float], direction: tuple[float, float], style: 
     return [tip, (bx + W * px, by + W * py), (bx - W * px, by - W * py)]
 
 
+def _ground(style: Style) -> str:
+    """The colour paper-coloured devices paint: casings, halos, hollow marker
+    fills, callout-box backing. These are erasers — they exist to knock a hole
+    in the ink beneath them — so they need SOME opaque colour even when the
+    figure carries no ground of its own. Groundless renders assume white, the
+    same hostile ground the contrast gate assumes in `paper_stops()`."""
+    if getattr(style, "transparent", False):
+        return "#ffffff"
+    return style.background
+
+
 def _emit_head(root: ET.Element, head: list[tuple[float, float]], color: str,
                style: Style, hollow: bool, stroke_width: float) -> None:
     attrs = {"class": "arrowhead",
              "points": " ".join(f"{_fmt(x)},{_fmt(y)}" for x, y in head)}
     if hollow:
-        transparent = getattr(style, "transparent", False)
-        attrs.update({"fill": "none" if transparent else style.background,
+        attrs.update({"fill": _ground(style),
                       "stroke": color, "stroke-width": _fmt(stroke_width),
                       "stroke-linejoin": "round"})
     else:
@@ -162,6 +172,10 @@ def _ensure_grain_pattern(defs: ET.Element) -> str:
 
 
 def _emit_grain(root: ET.Element, defs: ET.Element, style: Style, w: float, h: float) -> None:
+    # The PAGE-WIDE overlay is the paper's texture, so it goes with the paper:
+    # over no ground it composites as a full-bleed speckle field, which reads
+    # as exactly the background the transparent render exists to remove.
+    # Grain INSIDE a fill is a different thing — that is ink, and it stays.
     grain = 0.0 if getattr(style, "transparent", False) else getattr(style, "grain", 0.0)
     if grain > 0:
         ET.SubElement(root, "rect", {
@@ -416,7 +430,7 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
                 if it.opacity < 1.0:
                     el.set("fill-opacity", _fmt(it.opacity))
             else:
-                if it.casing and not transparent:
+                if it.casing:
                     ink = style.ink(it.role)
                     ET.SubElement(root, "path", {
                         "d": _path_d(cpts, it.closed), "fill": "none",
@@ -476,7 +490,7 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
                 _add_stroke(el, style, it.role)
             else:
                 el.set("stroke", "none")
-            if it.grain > 0 and not transparent and defs is not None:
+            if it.grain > 0 and defs is not None:
                 gattrs = {"d": d,
                           "fill": f"url(#{_ensure_grain_pattern(defs)})",
                           "fill-opacity": _fmt(it.grain), "stroke": "none"}
@@ -509,7 +523,7 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
             if it.filled:
                 attrs["fill"] = color
             else:
-                attrs.update({"fill": "none" if transparent else style.background,
+                attrs.update({"fill": _ground(style),
                               "stroke": color,
                               "stroke-width": _fmt(ink.width)})
             ET.SubElement(root, "circle", attrs)
@@ -565,8 +579,8 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
                     "x": _fmt(x0), "y": _fmt(y0),
                     "width": _fmt(x1 - x0), "height": _fmt(y1 - y0),
                     "rx": _fmt(CALLOUT_RADIUS),
-                    "fill": "none" if transparent
-                            else (paper[0] if paper else style.background),
+                    "fill": (paper[0] if paper and not transparent
+                             else _ground(style)),
                     "stroke": color, "stroke-width": _fmt(frame_w)})
             _emit_canvas_label(root, cink.label, style)
 
@@ -593,12 +607,15 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
                 # angle_deg is CCW on the page; SVG's rotate() is CW (+y down)
                 tgt = ET.SubElement(root, "g", {
                     "transform": f"rotate({_fmt(-it.angle_deg)} {_fmt(x)} {_fmt(y)})"})
-            halo_on = it.halo and not transparent
+            # A casing is paper knocking a hole in the ink beneath it. With
+            # no ground there is no hole to knock — painting one would put an
+            # opaque card on a figure that is meant to be ink on alpha.
+            halo_on = it.halo and not getattr(style, "transparent", False)
             draw_math(tgt, it.latex, x, y,
                       size_pt=style.label_pt(it.size_pt),
                       color=it.color or style.ink(it.role).color,
                       halign=it.ha, valign=it.va,
-                      halo_color=style.background if halo_on else None,
+                      halo_color=_ground(style) if halo_on else None,
                       halo_width=style.halo_width if halo_on else 0.0)
 
 
@@ -682,7 +699,7 @@ def figure_svg_tree(fig: "Figure", style: Style = DEFAULT_STYLE,
         for poly in ink.hollow:
             el = ET.SubElement(root, "polygon", {
                 "points": " ".join(f"{_fmt(x)},{_fmt(y)}" for x, y in poly),
-                "fill": "none" if transparent else style.background})
+                "fill": _ground(style)})
             _add_stroke(el, style, Role.ANNOTATION)
         for lab in ink.labels:
             _emit_canvas_label(root, lab, style)

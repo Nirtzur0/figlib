@@ -1,6 +1,7 @@
 """Continuous ink channels: width profiles, ramps along curves, casing,
 clipping, raster fields — the attributes that vary along or under a stroke."""
 
+import dataclasses
 import re
 from xml.etree import ElementTree as ET
 
@@ -11,6 +12,10 @@ from figlib.scene import Curve, Scene
 from figlib.style import DEFAULT_STYLE, Role
 
 NS = {"s": "http://www.w3.org/2000/svg"}
+
+# Casings and halos are paper-coloured erasers, so they only exist on a style
+# that owns its ground. The default style is groundless.
+PAPERED = dataclasses.replace(DEFAULT_STYLE, transparent=False)
 
 
 def _paths(svg: str) -> list[ET.Element]:
@@ -96,18 +101,20 @@ class TestRampSegments:
 
 
 class TestCasing:
-    def test_label_halo_emits_paper_stroked_copy_beneath_ink(self):
+    def test_label_halo_emits_one_paper_rect_beneath_ink(self):
+        """One casing per label, not one per glyph: a stroked copy of the
+        glyphs reads as a separate patch behind every letter and bites the
+        ink underneath in the gaps between them."""
         from figlib.scene import MathLabel
-        sc = Scene(items=[MathLabel(r"x", (0.5, 0.0), halo=True)],
+        sc = Scene(items=[MathLabel(r"r = -1", (0.5, 0.0), halo=True)],
                    xlim=(0.0, 1.0), ylim=(-0.5, 0.5))
-        svg = to_svg(sc, DEFAULT_STYLE, width_px=400)
+        svg = to_svg(sc, PAPERED, width_px=400)
         els = list(ET.fromstring(svg).iter())
         halo = [i for i, e in enumerate(els)
-                if e.get("stroke") == DEFAULT_STYLE.background
-                and e.get("fill") == DEFAULT_STYLE.background]
+                if e.get("class") == "label-casing"]
         ink = [i for i, e in enumerate(els)
-               if e.get("fill") == DEFAULT_STYLE.ink(Role.CONTENT).color]
-        assert halo, "no paper-stroked glyph copy found"
+               if e.get("fill") == PAPERED.ink(Role.CONTENT).color]
+        assert len(halo) == 1, f"expected one casing rect, got {len(halo)}"
         assert ink, "no ink glyph copy found"
         assert max(halo) < min(ink), "halo must render beneath the ink copy"
         # never mutate shared <symbol> defs — the stroke would leak into
@@ -120,24 +127,29 @@ class TestCasing:
         pts = np.column_stack([np.linspace(0.0, 1.0, 10), np.zeros(10)])
         sc = Scene(items=[Curve(pts, casing=True)],
                    xlim=(0.0, 1.0), ylim=(-0.5, 0.5))
-        svg = to_svg(sc, DEFAULT_STYLE, width_px=400)
+        svg = to_svg(sc, PAPERED, width_px=400)
         paths = _paths(svg)
-        base_w = DEFAULT_STYLE.ink(Role.CONTENT).width
+        base_w = PAPERED.ink(Role.CONTENT).width
         casing = [i for i, p in enumerate(paths)
-                  if p.get("stroke") == DEFAULT_STYLE.background
+                  if p.get("stroke") == PAPERED.background
                   and float(p.get("stroke-width", 0)) > base_w]
         ink = [i for i, p in enumerate(paths)
-               if p.get("stroke") == DEFAULT_STYLE.ink(Role.CONTENT).color]
+               if p.get("stroke") == PAPERED.ink(Role.CONTENT).color]
         assert len(casing) == 1
         assert casing[0] < ink[0], "casing must render beneath its own stroke"
 
-    def test_halo_skipped_when_transparent(self):
-        from dataclasses import replace
+    def test_halo_is_suppressed_when_groundless(self):
+        """A casing is paper knocking a hole in the ink beneath it. With no
+        ground there is no hole to knock, and a white patch on an alpha
+        figure is an opaque card wherever the document's page isn't white."""
         from figlib.scene import MathLabel
         from figlib.theme import CLEAN, transparent_variant
         sc = Scene(items=[MathLabel(r"x", (0.5, 0.0), halo=True)],
                    xlim=(0.0, 1.0), ylim=(-0.5, 0.5))
         svg = to_svg(sc, transparent_variant(CLEAN), width_px=400)
-        stroked = [e for e in ET.fromstring(svg).iter()
-                   if e.get("stroke") == CLEAN.background and e.get("fill") == CLEAN.background]
-        assert not stroked
+        white = [e for e in ET.fromstring(svg).iter()
+                 if (e.get("fill") or "").lower() == "#ffffff"
+                 or (e.get("stroke") or "").lower() == "#ffffff"]
+        assert white == [], "groundless render must carry no paper-coloured casing"
+        # and the page itself still carries no ground rect
+        assert "url(#paper)" not in svg

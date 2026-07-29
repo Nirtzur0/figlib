@@ -82,7 +82,7 @@ def load_program(path: str | Path) -> ModuleType:
 
 def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
         style: Style = DEFAULT_STYLE, width_px: float | None = None,
-        transparent: bool = False, place: bool = True) -> Report:
+        paper: bool = False, place: bool = True) -> Report:
     if not isinstance(program, ModuleType):
         program_path = Path(program)
         mod = load_program(program_path)
@@ -107,12 +107,12 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
     if width_px is None:
         width_px = fmt.display_width_px
     style = base_style.scaled(fmt.ink_scale)
-    if transparent:
-        from .theme import Theme, transparent_variant
+    if paper:
+        from .theme import Theme, opaque_variant
         if isinstance(style, Theme):
-            style = transparent_variant(style)
+            style = opaque_variant(style)
     diags = numerical(lambda: mod.assertions(geom))
-    stem = mod.__name__ + ("_transparent" if transparent else "")
+    stem = mod.__name__ + ("_paper" if paper else "")
     if isinstance(built, Figure):
         if place:
             notes += [f"placed: {n}" for n in

@@ -89,8 +89,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="override the figure's declared FORMAT width (CSS px)")
     ap.add_argument("--readback-prompt", action="store_true",
                     help="print the cold-reader prompt for the rendered PNG")
+    ap.add_argument("--paper", action="store_true",
+                    help="render the theme's paper ground, grain and casings; "
+                         "the default is no ground (SVG+PNG keep alpha)")
     ap.add_argument("--transparent", action="store_true",
-                    help="render with no paper/grain; SVG+PNG keep alpha")
+                    help=argparse.SUPPRESS)   # deprecated: now the default
     ap.add_argument("--no-autoplace", action="store_true",
                     help="skip the label auto-place pass (raw declared offsets)")
     ap.add_argument("--report", action="store_true",
@@ -115,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     if len(args.program) != 1:
         ap.error("exactly one figure program is required")
 
-    report = run(args.program[0], width_px=args.width, transparent=args.transparent,
+    report = run(args.program[0], width_px=args.width, paper=args.paper,
                  place=not args.no_autoplace)
     print(report.summary())
     if args.report:
