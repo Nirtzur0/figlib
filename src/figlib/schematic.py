@@ -33,7 +33,7 @@ import numpy as np
 
 from .scene import Curve, FilledCurve, Item, MathLabel
 from .style import Role
-from .typeset import render_math
+from .typeset import apply_register, render_math
 
 XY = tuple[float, float]
 # A port spec is "left" | "top@0.25" | ("right", 0.8).
@@ -225,6 +225,7 @@ class Node(_Box):
     fill: str | None = None            # paper colour, or None for an open box
     label_role: Role | None = None     # None -> the node's own role
     label_size_pt: float | None = None
+    label_register: str | None = None  # "mono" | "sans"; see typeset.apply_register
     label_offset_px: XY = (0.0, 0.0)
     width_scale: float = 1.0
     n_arc: int = 6
@@ -269,6 +270,7 @@ class Node(_Box):
                                  role=self.label_role or self.role,
                                  ha="center", va="center",
                                  size_pt=self.label_size_pt,
+                                 register=self.label_register,
                                  offset_px=self.label_offset_px))
         return out
 
@@ -325,6 +327,7 @@ class Junction:
     fill: str | None = None            # paper colour, as on `Node`
     label_role: Role | None = None     # None -> the junction's own role
     label_size_pt: float | None = None
+    label_register: str | None = None  # "mono" | "sans"; see typeset.apply_register
     arg_role: Role = Role.ANNOTATION
     arg_size_pt: float | None = None   # None -> the style's annotation size
     n_arc: int = 12
@@ -382,7 +385,8 @@ class Junction:
         out.append(MathLabel(self.glyph, self.center,
                              role=self.label_role or self.role,
                              ha="center", va="center",
-                             size_pt=self.label_size_pt))
+                             size_pt=self.label_size_pt,
+                             register=self.label_register))
         out += [self._arg_label(a, latex) for a, latex in self.args]
         return out
 
@@ -561,6 +565,7 @@ class Edge:
     label_anchor: XY | None = None     # ...an explicit point is given
     label_role: Role | None = None
     label_size_pt: float | None = None
+    label_register: str | None = None  # "mono" | "sans"; see typeset.apply_register
     label_ha: str = "center"
     label_va: str = "bottom"
     label_offset_px: XY = (0.0, 0.0)
@@ -644,6 +649,7 @@ class Edge:
                                  role=self.label_role or self.role,
                                  ha=self.label_ha, va=self.label_va,
                                  size_pt=self.label_size_pt,
+                                 register=self.label_register,
                                  offset_px=self.label_offset_px,
                                  halo=self.label_halo))
         return out
@@ -816,10 +822,12 @@ def items(*objs) -> list[Item]:
 # --- schematic checks (assertion helpers, not magic) ------------------------
 
 
-def label_extent_px(latex: str, size_pt: float = 11.0) -> tuple[float, float]:
+def label_extent_px(latex: str, size_pt: float = 11.0,
+                    register: str | None = None) -> tuple[float, float]:
     """Exact typeset (width, height) in canvas px — the same metrics the
-    mechanical gate boxes with."""
-    m = render_math(latex, size_pt)
+    mechanical gate boxes with. `register` must be the label's own, or a
+    mono label measures narrow and the fit check lies."""
+    m = render_math(apply_register(latex, register), size_pt)
     return m.width_px, m.height_px
 
 
@@ -842,7 +850,8 @@ def label_overflow(nodes: Sequence[Node], scale: float, size_pt: float,
     for nd in nodes:
         if not nd.label:
             continue
-        w, h = label_extent_px(nd.label, nd.label_size_pt or size_pt)
+        w, h = label_extent_px(nd.label, nd.label_size_pt or size_pt,
+                               nd.label_register)
         bw, bh = nd.width * scale, nd.height * scale
         if w + pad_px > bw or h + pad_px > bh:
             bad.append(f"{nd.key}: label {w:.0f}x{h:.0f}px in a "

@@ -16,7 +16,7 @@ from .layout import Transform
 from .render import brace_ink, callout_ink
 from .scene import Brace, Callout, Curve, MathLabel, Point, Scene, Vector
 from .style import Role, Style
-from .typeset import render_math
+from .typeset import apply_register, render_math
 
 # Fraction of a label's height assumed to hang below the baseline.
 _DESCENT_FRAC = 0.2
@@ -44,9 +44,14 @@ LabelBox = tuple[str, float, tuple[float, float, float, float]]
 
 
 def _box_at(latex: str, size_pt: float, x: float, y: float,
-            ha: str, va: str) -> tuple[float, float, float, float]:
-    """Exact typeset bbox anchored at canvas (x, y)."""
-    m = render_math(latex, size_pt)
+            ha: str, va: str,
+            register: str | None = None) -> tuple[float, float, float, float]:
+    """Exact typeset bbox anchored at canvas (x, y).
+
+    THE measurement choke point: every label box in the library comes
+    through here, so applying the register once here is what keeps the
+    gate's boxes on the ink the renderer draws."""
+    m = render_math(apply_register(latex, register), size_pt)
     w, h = m.width_px, m.height_px
     if ha == "center":
         x -= w / 2
@@ -84,7 +89,7 @@ def _canvas_label_box(it: MathLabel, style: Style) -> LabelBox:
     pt = style.label_pt(it.size_pt)
     x = it.anchor[0] + it.offset_px[0]
     y = it.anchor[1] + it.offset_px[1]
-    box = _box_at(it.latex, pt, x, y, it.ha, it.va)
+    box = _box_at(it.latex, pt, x, y, it.ha, it.va, it.register)
     if it.angle_deg:
         box = _rotate_box(box, x, y, it.angle_deg)
     return (it.latex, pt, box)
@@ -107,7 +112,7 @@ def _label_entries(scene: Scene, style: Style, t: Transform) -> list[LabelEntry]
             x, y = t.to_canvas(it.anchor)
             x += it.offset_px[0]
             y += it.offset_px[1]
-            box = _box_at(it.latex, pt, x, y, it.ha, it.va)
+            box = _box_at(it.latex, pt, x, y, it.ha, it.va, it.register)
             if it.angle_deg:
                 box = _rotate_box(box, x, y, it.angle_deg)
             entries.append(((it.latex, pt, box), it))

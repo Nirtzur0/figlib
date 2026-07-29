@@ -19,7 +19,7 @@ from .scene import (AngleMark, Brace, Callout, Curve, FilledCurve, Gradient,
                     MathLabel, Point, RasterField, RightAngleMark, Scene,
                     Vector)
 from .style import DEFAULT_STYLE, Role, Style
-from .typeset import draw_math, render_math
+from .typeset import apply_register, draw_math, render_math
 
 SVG_NS = "http://www.w3.org/2000/svg"
 
@@ -594,7 +594,7 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
                 tgt = ET.SubElement(root, "g", {
                     "transform": f"rotate({_fmt(-it.angle_deg)} {_fmt(x)} {_fmt(y)})"})
             halo_on = it.halo and not transparent
-            draw_math(tgt, it.latex, x, y,
+            draw_math(tgt, apply_register(it.latex, it.register), x, y,
                       size_pt=style.label_pt(it.size_pt),
                       color=it.color or style.ink(it.role).color,
                       halign=it.ha, valign=it.va,
@@ -625,7 +625,7 @@ def _emit_canvas_label(root: ET.Element, lab: MathLabel, style: Style) -> None:
     if lab.angle_deg:
         root = ET.SubElement(root, "g", {
             "transform": f"rotate({_fmt(-lab.angle_deg)} {_fmt(x)} {_fmt(y)})"})
-    draw_math(root, lab.latex, x, y,
+    draw_math(root, apply_register(lab.latex, lab.register), x, y,
               size_pt=style.label_pt(lab.size_pt),
               color=lab.color or style.ink(lab.role).color,
               halign=lab.ha, valign=lab.va)

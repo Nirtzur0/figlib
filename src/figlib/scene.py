@@ -154,6 +154,10 @@ class MathLabel:
     # paper-colored casing behind the glyphs so the label stays legible on
     # busy ink (cartographic halo). Skipped on transparent themes.
     halo: bool = False
+    # typographic REGISTER — a semantic channel, not appearance:
+    # "mono" = literal model input / data, "sans" = human interpretation,
+    # None = mathematics. See typeset.apply_register.
+    register: str | None = None
     # this label's position IS meaning (e.g. text along a curve): the
     # auto-place pass never moves it, collisions fall to the gate
     pin: bool = False

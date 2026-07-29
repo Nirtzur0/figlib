@@ -31,6 +31,26 @@ def _stroke_outside_symbols(el: ET.Element, color: str, width: float) -> None:
         _stroke_outside_symbols(ch, color, width)
 
 
+# Typeface as a semantic channel: monospace = literal model input / data,
+# sans = human interpretation, absent = mathematics. Not appearance — a
+# theme never sees it, because swapping palettes must not change what a
+# token strip CLAIMS to be.
+_REGISTERS = {"mono": r"\mathtt", "sans": r"\mathsf"}
+
+
+def apply_register(latex: str, register: str | None) -> str:
+    """Wrap `latex` in the register's font command. Apply this at EVERY
+    point a label is measured or drawn — the mechanical gate's boxes are
+    only on the ink if measurement and drawing typeset the same string."""
+    if register is None:
+        return latex
+    try:
+        cmd = _REGISTERS[register]
+    except KeyError:
+        raise ValueError(f"unknown register {register!r}; have {sorted(_REGISTERS)}")
+    return f"{cmd}{{{latex}}}"
+
+
 @dataclass(frozen=True)
 class TypesetLabel:
     latex: str
