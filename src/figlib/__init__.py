@@ -20,6 +20,8 @@ WRITING A FIGURE
     geometry    compute-layer numerics that generate geometry
     builders    compute-side emitters (grids, streamlines, level ladders)
     plots       data plots as scene items: Axes, scales, series, bands
+    derivation  annotated derivation rows — terms at real typeset widths,
+                operators midway, sans glosses hung beneath (a producer)
     schematic   Class B: typed Node/Port/Edge + a ranked layout pass
     matrix      matrices as Blocks drawn at their own aspect ratio;
                 structure/value encoders, the expression row, shape gates
