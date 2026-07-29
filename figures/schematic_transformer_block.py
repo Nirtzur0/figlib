@@ -86,8 +86,6 @@ the layout IS the content and there is no numerics to fall back on.
    zero crossings, no edge pierces a box it is not attached to.
 """
 
-import dataclasses
-
 import numpy as np
 
 from figlib import schematic as sch
@@ -142,32 +140,10 @@ PARAMS = {
     "branch_width": 1.0,
     "attn_stack": 2,           # ghost cards: the box abbreviates n heads
     "trunc_len_px": 44.0,      # the drawn stub of the continuing depth axis
-    "trunc_half_px": 6.0,      # half-diagonal of the truncation diamond
     "expected_crossings": 0,
     "xlim": (-1.0, 1.0),       # pins the px-per-unit scale; see compute()
     "ylim": (-0.09, 2.22),
 }
-
-
-class _StackUpNode(sch.Node):
-    """`stack` ghosts offset UP-right instead of the library's down-right.
-
-    Layout-local, not a library opinion: this figure's flow is upward, so
-    down-right cards sit on the incoming edge and swallow its arrowhead,
-    while up-right cards recede along the OUTGOING edge — the branch
-    visibly emerges from behind the stack, and the read arrow underneath
-    stays clean.
-    """
-
-    def items(self):
-        if not self.stack:
-            return super().items()
-        pts = self.outline()
-        d0 = sch.STACK_OFFSET * min(abs(self.width), abs(self.height))
-        ghosts = []
-        for k in range(int(self.stack), 0, -1):
-            ghosts += self._card(pts + [k * d0, k * d0], Role.MUTED)
-        return ghosts + dataclasses.replace(self, stack=0).items()
 
 
 def compute(p):
@@ -197,13 +173,16 @@ def compute(p):
                    for k in branch_keys), 0.0)
     nodes: dict[str, sch.Node] = {}
     for k in branch_keys:
-        # the attention box abbreviates n heads: ghost cards, not a caption
+        # the attention box abbreviates n heads: ghost cards, not a caption.
+        # This figure's flow is upward, so the default down-right cards
+        # would sit on the incoming edge and swallow its arrowhead; up-right
+        # cards recede along the OUTGOING edge instead — the branch visibly
+        # emerges from behind the stack.
         nodes[k] = sch.auto_node(k, pos[k], lab[k], scale=scale, size_pt=size_pt,
                                  pad_px=p["box_pad_px"], min_size=box_min,
                                  fill=RISO.background,
-                                 stack=p["attn_stack"] if k == "attn" else 0)
-    # same node, up-right ghosts (see _StackUpNode)
-    nodes["attn"] = _StackUpNode(**dataclasses.asdict(nodes["attn"]))
+                                 stack=p["attn_stack"] if k == "attn" else 0,
+                                 stack_dir=(1.0, 1.0))
     for k in ("in", "out"):
         w, h = sch.auto_size(lab[k], scale, size_pt, p["pill_pad_px"],
                              (u(p["pill_min_px"][0]), u(p["pill_min_px"][1])))
@@ -228,7 +207,7 @@ def compute(p):
     # hollow diamond, ellipsis: "goes on, deliberately stopped here"
     top = nodes["out"].port("top")
     edges.append(sch.edge(top, (top[0], top[1] + u(p["trunc_len_px"])),
-                          truncated=True, trunc_half=u(p["trunc_half_px"]),
+                          truncated=True, px_per_unit=scale,
                           key="spine-continue", **spine_kw))
     # d_model on the first segment, in the empty gutter opposite branch 1
     e = edges[0]
@@ -374,7 +353,7 @@ def assertions(g):
     c.check(depth.width_scale == p["spine_width"],
             "the depth stub is not drawn at stream weight — it reads as "
             "an annotation, not the same line continuing")
-    c.check(depth.anchors[1][1] + 4.0 * u(p["trunc_half_px"]) < g["ylim"][1],
+    c.check(depth.anchors[1][1] + 4.0 * u(sch.TRUNC_DIAMOND_HALF_PX) < g["ylim"][1],
             "the truncation mark escapes the declared ylim")
     chain = p["spine"]
     for e, (a, b) in zip(spine, zip(chain, chain[1:])):

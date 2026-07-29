@@ -44,7 +44,14 @@ _SIDES = ("left", "right", "bottom", "top")
 # states every other coordinate. Override per edge.
 BAR_HALF = 0.12       # half-length of an `inhibit` edge's flat terminal bar
 CHEVRON_GAP = 0.15    # spacing between the stacked heads of a `copy` edge
-TRUNC_DIAMOND_HALF = 0.10   # half-diagonal of a truncated edge's terminator
+
+# The truncation diamond is the exception: it is a terminator GLYPH, read
+# against the arrowheads next to it, so it is sized in CANVAS px like
+# `style.arrowhead_len` — a math-units default varied wildly with figure
+# scale. Resolved at emission through the edge's `px_per_unit` (the same
+# scale `label_overflow` already needs); `Edge.trunc_half` remains a
+# math-units override.
+TRUNC_DIAMOND_HALF_PX = 6.0   # half-diagonal of a truncated edge's terminator
 
 # A junction's argument labels sit at this multiple of its own radius —
 # dimensionless for the same reason STACK_OFFSET is: the gap has to read
@@ -230,6 +237,10 @@ class Node(_Box):
     width_scale: float = 1.0
     n_arc: int = 6
     stack: int = 0                     # ghost cards behind the box: "one of many"
+    stack_dir: XY = (1.0, -1.0)        # ghost-card direction, signs of (dx, dy):
+                                       # default down-right; an upward-flow
+                                       # schematic wants (+1, +1) so the cards
+                                       # recede along the OUTGOING edge
     dash: str | None = None            # provisional outline; see `unknown_node`
 
     @property
@@ -262,8 +273,9 @@ class Node(_Box):
         # body paints over all of them. MUTED because a ghost is the same
         # object off-focus — grammar.md's off-focus channel exactly.
         d0 = STACK_OFFSET * min(abs(self.width), abs(self.height))
+        sx, sy = self.stack_dir
         for k in range(int(self.stack), 0, -1):
-            out += self._card(pts + [k * d0, -k * d0], Role.MUTED)
+            out += self._card(pts + [k * d0 * sx, k * d0 * sy], Role.MUTED)
         out += self._card(pts, self.role)
         if self.label:
             out.append(MathLabel(self.label, self.center,
@@ -559,7 +571,9 @@ class Edge:
     truncated: bool = False
     bar_half: float = BAR_HALF
     chevron_gap: float = CHEVRON_GAP
-    trunc_half: float = TRUNC_DIAMOND_HALF
+    trunc_half: float | None = None    # math-units override of the diamond size
+    px_per_unit: float | None = None   # canvas px per math unit (px_per_unit());
+                                       # sizes the truncation diamond
     label: str | None = None
     label_at: float = 0.5              # arc-length fraction, unless...
     label_anchor: XY | None = None     # ...an explicit point is given
@@ -615,17 +629,29 @@ class Edge:
     def _truncation_mark(self) -> list[Item]:
         """Hollow diamond on the tip, `\\cdots` just past it.
 
-        Literal points, not derived ink: the diamond is stated in math
-        units like the `inhibit` bar, so it scales with the schematic and
-        no canvas-px resolver in render.py has to know it exists.
+        The diamond is a terminator glyph, so its size is CANVAS px
+        (`TRUNC_DIAMOND_HALF_PX`, the arrowhead precedent), resolved here
+        at emission through `px_per_unit` — no resolver in render.py has
+        to know it exists. Its stroke is capped at content weight
+        (width_scale 1.0): a heavy edge's inherited stroke would fill the
+        hole, and a self-filled hollow diamond is a different mark.
         """
+        if self.trunc_half is not None:
+            h = self.trunc_half
+        elif self.px_per_unit:
+            h = TRUNC_DIAMOND_HALF_PX / self.px_per_unit
+        else:
+            raise ValueError(
+                "truncated edge needs a scale for its diamond: pass "
+                "px_per_unit (canvas px per math unit — "
+                "schematic.px_per_unit(xlim, format.display_width_px)) "
+                "or a math-units trunc_half override")
         tip, u, nrm = self._terminal_tangent()
-        h = self.trunc_half
         dia = np.vstack([tip + h * u, tip + h * nrm, tip - h * u, tip - h * nrm])
         lab = tip + 2.5 * h * u
         return [Curve(dia, role=self.role, color=self.color,
                       opacity=self.opacity, closed=True, dash="solid",
-                      width_scale=self.width_scale * self.decor.width_scale),
+                      width_scale=min(1.0, self.width_scale * self.decor.width_scale)),
                 MathLabel(r"\cdots", (float(lab[0]), float(lab[1])),
                           role=Role.ANNOTATION, ha="center", va="center")]
 
