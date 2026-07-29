@@ -35,11 +35,16 @@ shrink type.
 ## The loop
 
 ```
-figcheck figures/<name>.py            # render + all deterministic gates
-figcheck figures/<name>.py --report   # textual layout inventory
-figcheck --regress                    # corpus-wide golden diff (exit 1 on drift)
-figcheck --update [figures/<name>.py] # refresh the committed SVG+PNG baselines
+make check F=figures/<name>.py             # render + all deterministic gates
+make check F="figures/<name>.py --report"  # textual layout inventory
+make regress                               # corpus golden diff (exit 1 on drift)
+make update [F=figures/<name>.py]          # refresh committed SVG+PNG baselines
 ```
+
+Bare `figcheck` is not on PATH and a raw `uv run figcheck` misses the
+cairo library path; the Makefile exports it. The raw escape hatch, for
+flags the targets don't pass through, is
+`DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uv run figcheck <args>`.
 
 `--regress` re-renders every figure and diffs the SVG text against
 `figures/out/`; on mismatch it rasterizes both and prints the changed-pixel
@@ -74,8 +79,12 @@ Environment: cairo needs `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`
   bug; the collision diagnostics speak offset_px, so trust them.
 - **Color is a theme channel or absent.** `color=` on any item accepts
   ONLY theme channel output — `theme.ramp(t)` (ordered quantity),
-  `theme.categorical(i, n)` (correspondence), `theme.surface_shade(t)`
-  (3D lighting) — never a hex literal. Roles (`Role.ACCENT1`,
+  `theme.categorical(i)` (correspondence), `theme.surface_shade(t)`
+  (3D lighting) — never a hex literal. `categorical` indexes a FIXED
+  order and takes no `n`: a hue that depended on how many series shared
+  the figure was not correspondence. Past `theme.correspondence_cap`
+  slots (RISO 4, CLEAN 3) identity must ride a second channel —
+  `Curve.dash`, facets, a folded tail. Roles (`Role.ACCENT1`,
   `Role.CONSTRUCTION`, ...) cover everything else. A hardcoded hex means
   the figure silently stops retheming, and the color gate will not save
   you from that; it only catches invisibility and hue collapse.
@@ -109,6 +118,9 @@ scratch. Each of these passed the full gate stack.
 | checkerboard motion portrait (bipolar net, orbit cells) | `vca_fig30_elliptic_checkerboard.py` |
 | brace / callout / pattern fill / raster field | `demo_glyphs_annulus.py` |
 | stochastic ensemble, honest seeds | `diffusion_ode_vs_sde.py` |
+| ensemble + evolving marginal density (paths vs. law) | `demo_ou_ensemble_field.py` |
+| phase portrait, separatrix, region wash by basin | `demo_basin_wash.py` |
+| bifurcation: parameter filmstrip + phase lines | `strogatz_saddle_node.py` |
 | series / partial-sum geometry | `fig09_exp_series_spiral.py` |
 | rails + typed paths (circuits idiom) | `induction_head_circuit.py` |
 | ranked node/edge schematic, main path as a spine | `schematic_transformer_block.py` |

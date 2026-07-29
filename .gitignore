@@ -5,3 +5,10 @@ __pycache__/
 venv/
 *.egg-info/
 .DS_Store
+
+# figcheck --zoom scratch crops; the svg/png baselines ARE committed
+figures/out/*.zoom.png
+
+# agent/tool scratch
+.playwright-mcp/
+/f0.png

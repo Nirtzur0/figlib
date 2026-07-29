@@ -113,10 +113,23 @@ def _emit(runs: list[tuple[bool, np.ndarray]], cam: Camera, hidden: str | None,
 
 def drape(pts3: np.ndarray, sphere: Sphere, cam: Camera, hidden: str | None = "dashed",
           tol: float = 1e-9, depth_bias: float = 0.04,
+          signed: np.ndarray | None = None,
           **curve_kw) -> list[tuple[float, Curve]]:
-    """A polyline lying ON the sphere, split into visible/hidden runs."""
-    return _emit(visibility_runs(pts3, sphere, cam, tol=tol),
-                 cam, hidden, depth_bias, curve_kw)
+    """A polyline lying ON the sphere, split into visible/hidden runs.
+
+    `signed` overrides the default camera dot test with a per-sample
+    visibility scalar (visible where >= tol), for curves whose hiddenness
+    is not just facing-away: e.g. an arc occluded by BOTH the far sheet
+    and a cutting plane takes the elementwise min of the two tests. It
+    must stay LINEAR in position along the polyline — the split
+    interpolates crossings on it, so a nonlinear scalar puts the
+    solid/dashed break in the wrong place.
+    """
+    runs = (_split_signed(np.asarray(pts3, dtype=float),
+                          np.asarray(signed, dtype=float), eps=tol)
+            if signed is not None
+            else visibility_runs(pts3, sphere, cam, tol=tol))
+    return _emit(runs, cam, hidden, depth_bias, curve_kw)
 
 
 def circle_on_sphere(sphere: Sphere, normal: np.ndarray, offset: float, cam: Camera,

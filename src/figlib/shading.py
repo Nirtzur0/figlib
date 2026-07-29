@@ -46,14 +46,23 @@ def chroma_ramp(base: str, *,
     return ramp
 
 
-def quantize(ramp: Ramp, bands: int) -> Ramp:
-    """Posterize a ramp into exactly `bands` steps sampled at band centers."""
+def quantize(ramp: Ramp, bands: int,
+             span: tuple[float, float] = (0.0, 1.0)) -> Ramp:
+    """Posterize a ramp into exactly `bands` steps sampled at band centers.
+
+    `span` sets the t-interval the bands divide. The default is the whole
+    ramp; a caller that knows its geometry's actual tonal sweep (e.g. a
+    cylinder's visible facets) passes that sweep, so all `bands` steps
+    land inside what is actually drawn instead of mostly off-screen.
+    """
     if bands < 2:
         raise ValueError(f"bands must be >= 2, got {bands}")
+    s0, s1 = span
+    w = (s1 - s0) or 1.0
 
     def q(t: float) -> str:
-        u = min(max(float(t), 0.0), 1.0)
+        u = min(max((float(t) - s0) / w, 0.0), 1.0)
         k = min(int(u * bands), bands - 1)
-        return ramp((k + 0.5) / bands)
+        return ramp(s0 + (k + 0.5) / bands * w)
 
     return q

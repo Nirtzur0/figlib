@@ -1,7 +1,7 @@
 [project]
 name = "figlib"
 version = "0.1.0"
-description = "Add your description here"
+description = "A figure compiler for mathematical exposition: figures as gated programs"
 readme = "README.md"
 authors = [
     { name = "nirtzur", email = "nirtzur0@gmail.com" }

@@ -128,3 +128,36 @@ class TestSilhouetteDiscAnchors:
         assert np.linalg.norm(p) == pytest.approx(1.0)
         p2, _ = project(p[None, :], CAM)
         assert anchor(p, CAM) == pytest.approx(tuple(p2[0]))
+
+
+class TestCustomVisibilityScalar:
+    """`drape(signed=...)` is the public seam for hiddenness that is not
+    just facing-away — a plane cut, a second occluder — replacing figure
+    programs reaching into the private split/emit helpers."""
+
+    def test_default_signed_reproduces_the_dot_test(self):
+        pts = circle_points(UNIT, np.array([0.0, 0.0, 1.0]), 0.3, n=257)
+        _, _, toward = CAM.axes()
+        signed = (pts - UNIT.center) @ toward
+        a = drape(pts, UNIT, CAM, tol=0.0)
+        b = drape(pts, UNIT, CAM, tol=0.0, signed=signed)
+        assert len(a) == len(b)
+        for (da, ca), (db, cb) in zip(a, b):
+            assert da == pytest.approx(db)
+            assert np.allclose(ca.pts, cb.pts)
+            assert ca.dash == cb.dash
+
+    def test_a_second_test_hides_more(self):
+        # equator, additionally cut by the plane z >= 0 -- which the whole
+        # equator sits ON, so min() with z leaves it entirely on the boundary
+        # and a strict-positive cut hides everything the dot test kept.
+        pts = circle_points(UNIT, np.array([0.0, 1.0, 0.0]), 0.0, n=257)
+        _, _, toward = CAM.axes()
+        facing = (pts - UNIT.center) @ toward
+        both = np.minimum(facing, pts[:, 2])
+        vis_dot = [c for _, c in drape(pts, UNIT, CAM, tol=0.0) if c.dash is None]
+        vis_cut = [c for _, c in drape(pts, UNIT, CAM, tol=0.0, signed=both)
+                   if c.dash is None]
+        length = lambda cs: sum(  # noqa: E731
+            float(np.linalg.norm(np.diff(c.pts, axis=0), axis=1).sum()) for c in cs)
+        assert length(vis_cut) < length(vis_dot)
