@@ -1,0 +1,150 @@
+"""VCA Fig [4] (p.58): the mapping z -> z^n on a polar grid.
+
+Modern twist over Needham's grayscale: rays are hue-coded by angle, so
+the reader can SEE which ray went where — the tripling of angles is
+carried by color correspondence, not just by the theta/n-theta labels.
+"""
+
+import numpy as np
+
+from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene, Vector
+from figlib.style import Role
+
+CLAIM = (
+    "The mapping z -> z^3 sends each ray at angle theta to the ray at angle "
+    "3*theta and each circular arc of radius r to the arc of radius r^3, so a "
+    "polar-grid sector opens out into a fan three times as wide while every "
+    "grid intersection stays a right angle."
+)
+
+PARAMS = {
+    "n": 3,
+    "theta_max_deg": 72.0,
+    "n_rays": 10,
+    "radii": [0.25, 0.45, 0.65, 0.85, 1.0, 1.05, 1.25],
+    "samples": 160,
+    "w_origin": 3.9,   # where the image panel sits
+}
+
+# viridis, 10 stops — hue encodes theta
+RAY_COLORS = ["#440154", "#482878", "#3e4989", "#31688e", "#26828e",
+              "#1f9e89", "#35b779", "#6ece58", "#b5de2b", "#dbc932"]
+
+
+def arc_gray(r: float, R: float) -> str:
+    """Lightness encodes radius, dark = large r — the r -> r^n bunching
+    must be readable, so the arcs cannot be uniform faint ink."""
+    v = int(190 - 120 * (r / R))
+    return f"#{v:02x}{v:02x}{v:02x}"
+
+
+def compute(p):
+    n = p["n"]
+    th_max = np.deg2rad(p["theta_max_deg"])
+    R = max(p["radii"])
+    thetas = np.linspace(0.0, th_max, p["n_rays"])
+    rr = np.linspace(0.02, R, p["samples"])
+    aa = np.linspace(0.0, th_max, p["samples"])
+
+    rays = [rr[:, None] * np.array([np.cos(t), np.sin(t)]) for t in thetas]
+    arcs = [r * np.column_stack([np.cos(aa), np.sin(aa)]) for r in p["radii"]]
+
+    def fmap(pts):
+        z = (pts[:, 0] + 1j * pts[:, 1]) ** n
+        return np.column_stack([z.real, z.imag])
+
+    return {
+        "n": n, "thetas": thetas, "radii": np.array(p["radii"]), "R": R,
+        "th_max": th_max,
+        "rays": rays, "arcs": arcs,
+        "rays_w": [fmap(r) for r in rays],
+        "arcs_w": [fmap(a) for a in arcs],
+    }
+
+
+def build(g):
+    n = g["n"]
+    W = PARAMS["w_origin"]
+    R = g["R"]
+    Rn = R ** n
+    s = Scene()
+
+    def shift(pts):
+        out = pts.copy()
+        out[:, 0] += W
+        return out
+
+    # --- domain panel (z-plane) ---
+    s.add(Vector((-0.25, 0.0), (R + 0.42, 0.0), role=Role.MUTED, width_scale=0.8))
+    s.add(Vector((0.0, -0.18), (0.0, R + 0.12), role=Role.MUTED, width_scale=0.8))
+    for r, arc in zip(g["radii"][:-1], g["arcs"][:-1]):
+        if abs(r - 1.0) < 1e-9:
+            s.add(Curve(arc, role=Role.CONSTRUCTION, width_scale=1.0))
+        else:
+            s.add(Curve(arc, role=Role.MUTED, width_scale=0.85, color=arc_gray(r, R)))
+    s.add(Curve(g["arcs"][-1], role=Role.CONTENT, width_scale=1.2))  # outer arc bold
+    for ray, c in zip(g["rays"], RAY_COLORS):
+        s.add(Curve(ray, role=Role.CONTENT, width_scale=0.95, color=c))
+    s.add(AngleMark((0, 0), (1, 0), (np.cos(g["th_max"]), np.sin(g["th_max"])), radius=0.17))
+    s.add(MathLabel(r"\theta", (0.255 * np.cos(g["th_max"] / 2), 0.255 * np.sin(g["th_max"] / 2)),
+                    ha="left", va="center", size_pt=10, role=Role.ANNOTATION))
+    s.add(Point((1.0, 0.0), role=Role.CONTENT, radius_scale=0.7))
+    s.add(MathLabel(r"1", (1.0, 0.0), ha="center", va="top", offset_px=(0, 8)))
+    s.add(MathLabel(r"r", (R, 0.0), ha="center", va="top", offset_px=(6, 8)))
+    s.add(MathLabel(r"0", (0.0, 0.0), ha="right", va="top", offset_px=(-5, 6)))
+
+    # --- mapping arrow ---
+    ax0, ax1, ay = R + 0.35, R + 1.15, 1.62
+    s.add(Vector((ax0, ay), (ax1, ay), role=Role.ANNOTATION))
+    s.add(MathLabel(r"z \mapsto z^{n}", ((ax0 + ax1) / 2, ay),
+                    ha="center", va="bottom", offset_px=(0, -8), size_pt=13))
+    s.add(MathLabel(rf"(\text{{here }} n = {n})", ((ax0 + ax1) / 2, ay),
+                    ha="center", va="top", offset_px=(0, 8), size_pt=9, role=Role.ANNOTATION))
+
+    # --- image panel (w-plane) ---
+    s.add(Vector((W - Rn - 0.35, 0.0), (W + Rn + 0.45, 0.0), role=Role.MUTED, width_scale=0.8))
+    s.add(Vector((W, -0.35), (W, Rn + 0.25), role=Role.MUTED, width_scale=0.8))
+    for r, arc in zip(g["radii"][:-1], g["arcs_w"][:-1]):
+        if abs(r - 1.0) < 1e-9:
+            s.add(Curve(shift(arc), role=Role.CONSTRUCTION, width_scale=1.0))
+        else:
+            s.add(Curve(shift(arc), role=Role.MUTED, width_scale=0.85, color=arc_gray(r, R)))
+    s.add(Curve(shift(g["arcs_w"][-1]), role=Role.CONTENT, width_scale=1.2))
+    for ray, c in zip(g["rays_w"], RAY_COLORS):
+        s.add(Curve(shift(ray), role=Role.CONTENT, width_scale=0.95, color=c))
+    th_img = n * g["th_max"]
+    s.add(AngleMark((W, 0), (1, 0), (np.cos(th_img), np.sin(th_img)), radius=0.42))
+    s.add(MathLabel(rf"{n}\theta", (W + 0.60 * np.cos(th_img / 2), 0.60 * np.sin(th_img / 2)),
+                    ha="center", va="center", size_pt=10, role=Role.ANNOTATION))
+    s.add(Point((W + 1.0, 0.0), role=Role.CONTENT, radius_scale=0.7))
+    s.add(MathLabel(r"1", (W + 1.0, 0.0), ha="center", va="top", offset_px=(0, 8)))
+    s.add(MathLabel(rf"r^{n}", (W + Rn, 0.0), ha="center", va="top", offset_px=(8, 8)))
+    s.add(MathLabel(r"0", (W, 0.0), ha="right", va="top", offset_px=(-5, 6)))
+
+    return s
+
+
+def assertions(g):
+    n = g["n"]
+    # image rays have constant angle exactly n*theta
+    for th, ray_w in zip(g["thetas"], g["rays_w"]):
+        ang = np.arctan2(ray_w[:, 1], ray_w[:, 0])
+        ang = np.unwrap(ang)
+        target = ((n * th + np.pi) % (2 * np.pi)) - np.pi
+        dev = np.abs(((ang - target + np.pi) % (2 * np.pi)) - np.pi)
+        assert dev.max() < 1e-9, f"image of ray {np.rad2deg(th):.0f}deg is not a ray at n*theta"
+    # image arcs have constant radius exactly r^n
+    for r, arc_w in zip(g["radii"], g["arcs_w"]):
+        rad = np.hypot(arc_w[:, 0], arc_w[:, 1])
+        assert np.max(np.abs(rad - r ** n)) < 1e-9, f"image of arc r={r} is not radius r^n"
+    # conformality: mapped rays meet mapped arcs at right angles.
+    # tangents via finite differences at matched parameter points.
+    ray = g["rays"][4]
+    z = ray[:, 0] + 1j * ray[:, 1]
+    w = z ** n
+    tang_ray = np.diff(w)
+    # arc through each sample point of that ray: tangent i*z * (dw/dz) direction
+    dwdz = n * z[:-1] ** (n - 1)
+    tang_arc = 1j * z[:-1] * dwdz
+    cosang = np.real(tang_ray * np.conj(tang_arc)) / (np.abs(tang_ray) * np.abs(tang_arc))
+    assert np.max(np.abs(cosang)) < 1e-3, "grid intersections not orthogonal after mapping"

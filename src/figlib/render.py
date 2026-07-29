@@ -71,6 +71,8 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
         if isinstance(it, Curve):
             el = ET.SubElement(root, "path", {"d": _path_d(t.to_canvas_arr(it.pts), it.closed), "fill": "none"})
             _add_stroke(el, style, it.role, it.width_scale)
+            if it.color is not None:
+                el.set("stroke", it.color)
             if it.opacity < 1.0:
                 el.set("stroke-opacity", _fmt(it.opacity))
 
@@ -141,7 +143,7 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
             y += it.offset_px[1]
             draw_math(root, it.latex, x, y,
                       size_pt=it.size_pt or style.label_size_pt,
-                      color=style.ink(it.role).color,
+                      color=it.color or style.ink(it.role).color,
                       halign=it.ha, valign=it.va)
 
     return root, t

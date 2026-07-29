@@ -22,6 +22,7 @@ class Curve:
     closed: bool = False
     width_scale: float = 1.0
     opacity: float = 1.0
+    color: str | None = None       # semantic override (e.g. hue encodes a coordinate)
 
 
 @dataclass
@@ -53,6 +54,7 @@ class MathLabel:
     latex: str
     anchor: XY                     # math coords
     role: Role = Role.CONTENT
+    color: str | None = None
     size_pt: float | None = None   # None -> style.label_size_pt
     ha: str = "left"               # left | center | right
     va: str = "base"               # top | center | base | bottom
