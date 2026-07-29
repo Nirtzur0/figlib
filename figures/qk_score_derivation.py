@@ -12,8 +12,8 @@ compared against the unexpanded product.
    LIST, and the reader has no reason to believe the list is complete or
    that its members differ in size. Both facts are structural. Written as
    an equation with the terms co-located on one line, exhaustiveness is
-   perceptual (you can see the row closes), and the size ordering can be
-   carried by ink weight on the terms themselves. The specific inference
+   perceptual (you can see the row closes), and the terms that matter can
+   be picked out where they stand. The specific inference
    the reader must make — "the corruption of an attention score is, to
    leading order, TWO terms, each pairing a full-size signal against an
    error" — becomes a thing you look at rather than a thing you derive.
@@ -34,28 +34,38 @@ compared against the unexpanded product.
    one math unit IS one reading px, which is the honest frame for a
    typographic object — WIDE is declared at 1000 px but read at
    1000/1.45 = 690, and `size_pt` is reading-size pt, so measuring in
-   display px would lay the row out 1.45x too tight. assertions() pins the
-   identity.
+   display px would lay the row out 1.45x too tight. Every use of the slot
+   width reads the module-level FORMAT, and assertions() checks the row
+   against it — so re-declaring the format moves the row's budget with the
+   page instead of leaving a WIDE-shaped constant behind.
 4. TRAVERSAL. The eye enters on the left at `s = (...)(...)`, the thing it
    already knows, and runs right along one line. The 3-second glance
    yields "an equation, four terms, two of them highlighted and braced".
    The 30-second read yields the 2x2 enumeration from the glosses, the
-   name of the braced pair, and the fact that the last term is drawn
-   fainter because it is smaller.
+   name of the braced pair, and the fact that the last term is set off
+   focus — muted ink plus an "error on error" gloss.
 5. MECHANISM ANNOTATION. Readable off the figure: which factor is
    corrupted in each term (the glosses); that the two cross terms are the
    first-order error (the brace); that the last term is second order (its
    muted ink, and its gloss); and that nothing was dropped (the sans line
    at the foot — the exhaustiveness claim is the punchline and would
    otherwise ride silently on the reader's trust).
-6. READER EFFORT. Delegated: composing "these two are first order" with
-   "this one is drawn faint" into the size ordering |t1| > |cross| > |t4|.
+6. READER EFFORT. Delegated: composing the brace's "first order in eps"
+   with the last gloss's "error on error" into the size ordering
+   |t1| > |cross| > |t4| — a step in the algebra of orders, not a colour
+   lookup, which is why it is worth delegating at all.
    Kept: nothing about decoding — every term carries its own gloss, so no
    subscript has to be held in memory across the row.
-7. CHANNELS. Ink weight is the hierarchy, and it encodes ORDER IN eps:
-   CONTENT for the signal term, ACCENT1 for the two first-order cross
-   terms (they are THE object — the figure's punchline), MUTED for the
-   second-order term. Hue is not carrying correspondence here and no
+7. CHANNELS. Ink is FOCUS, not order. It is tempting to read
+   CONTENT/ACCENT1/MUTED as a ladder in eps, and it is not one: ACCENT1 is
+   LOUDER than CONTENT, so the three roles do not form an ordered channel
+   and nothing about magnitude can be read off them. What they encode is
+   attention — ACCENT1 on the two cross terms because they are THE object,
+   the figure's punchline; MUTED on the error-error term because it is off
+   focus; CONTENT on the signal term, which is the thing the reader already
+   came in knowing. The ORDER in eps is carried by language instead, where
+   it can be stated exactly: the brace label ("first order in eps") and the
+   error-on-error gloss. Hue is not carrying correspondence here and no
    categorical slot is used; that would be decoration. The glosses are a
    second VOICE, not a second colour: sans register, ANNOTATION ink, 0.8x
    the size, hung on a hairline tick. The brace is the only drawn glyph,
@@ -69,25 +79,24 @@ compared against the unexpanded product.
    land here); and the softmax that consumes s is absent, so the figure
    says nothing about how a score error becomes an attention error. The
    accidental assertion worth auditing: the four terms are drawn the same
-   SIZE, which is not their magnitude ordering — magnitude rides on ink,
-   and assertions() checks that the ordering it claims is the one the
-   numbers actually have.
+   SIZE, and no channel on the page encodes their magnitudes — the ordering
+   lives in the brace's and the gloss's WORDS, so assertions() checks that
+   those words are the ordering the numbers actually have.
 9. GATES. Numerical: the four terms generated from the spec sum to the
    unexpanded product to machine precision (exhaustiveness), and over an
    ensemble at |eps| = delta|x| the mean magnitudes order as
    signal : cross : second = 1 : delta : delta^2, which is the ordering
-   the ink weights claim. Metric: the glosses are laid out from runtime
-   font metrics and the builder does NOT solve their collisions, so their
-   pairwise non-overlap and their clearance below the term boxes are
-   asserted, as is the brace covering exactly the two cross terms and the
-   whole row fitting inside the declared xlim.
+   the brace label and the last gloss state in words. Metric: the glosses
+   are laid out from runtime font metrics and the builder does NOT solve
+   their collisions, so their pairwise non-overlap and their clearance
+   below the term boxes are asserted, as is the brace covering exactly the
+   two cross terms, and the whole row fitting the slot FORMAT declares.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from figlib import schematic as sch
 from figlib.derivation import Term, derivation_row
 from figlib.format import WIDE
 from figlib.scene import Brace, MathLabel, Scene
@@ -158,7 +167,14 @@ def _term_latex(left: str, right: str) -> str:
 
 
 def _role(left: str, right: str) -> Role:
-    """Ink weight = order in eps. Signal, first order, second order."""
+    """Ink = FOCUS, indexed by order in eps.
+
+    Not an ordered channel — ACCENT1 is louder than CONTENT, so nothing
+    about magnitude can be read off these three roles. Order in eps is only
+    the INDEX; what the roles say is where to look: the signal term is the
+    thing already known (CONTENT), the two cross terms are the punchline
+    (ACCENT1), the error-error term is off focus (MUTED).
+    """
     order = (left == "e") + (right == "e")
     return (Role.CONTENT, Role.ACCENT1, Role.MUTED)[order]
 
@@ -173,8 +189,12 @@ def compute(p):
     # WIDE is declared at 1000 px and read near 690 (format.ink_scale 1.45),
     # and MathLabel.size_pt is reading-size pt that the render rescales. So
     # the row is laid out in reading px and the format maps them to the page;
-    # measuring in display px would compress the row by 1.45x.
-    units_across = WIDE.display_width_px / (WIDE.ink_scale * (1.0 + 2.0 * p["pad_frac"]))
+    # measuring in display px would compress the row by 1.45x. Everything
+    # here reads FORMAT, never WIDE: retyping the format would make the row
+    # a constant while the page moved, and the width check below would then
+    # be comparing WIDE against WIDE and passing on any format.
+    units_across = (FORMAT.display_width_px
+                    / (FORMAT.ink_scale * (1.0 + 2.0 * p["pad_frac"])))
     size_pt = p["size_pt"]
     gloss_pt = p["gloss_scale"] * size_pt
 
@@ -208,7 +228,7 @@ def compute(p):
     # --- the numbers the drawn terms claim ----------------------------------
     # Same spec, evaluated: the sum of the four terms against the unexpanded
     # product (exhaustiveness), and their magnitudes at |eps| = delta |x|
-    # (the ordering the ink weights assert).
+    # (the ordering the brace label and the last gloss assert in words).
     rng = np.random.default_rng(p["seed"])
     n, d = p["n_samples"], p["dim"]
     W = rng.standard_normal((d, d)) / np.sqrt(d)
@@ -267,7 +287,8 @@ def assertions(g):
             f"the drawn terms do not sum to the product: {len(parts)} terms, "
             f"max residual {resid:.3e}")
 
-    # 2. The ink weights claim an ORDER IN eps. Check the magnitudes have it,
+    # 2. The brace label and the error-on-error gloss claim an ORDER IN eps
+    #    in words. Check the magnitudes have it,
     #    and at the right rate: cross ~ delta, second order ~ delta^2.
     mag = {k: float(np.mean(np.abs(v))) for k, v in parts.items()}
     sig, ee = mag[("x", "x")], mag[("e", "e")]
@@ -279,7 +300,7 @@ def assertions(g):
                               ("second order", ee / sig, p["delta"] ** 2)):
         c.check(0.5 * want < ratio < 2.0 * want,
                 f"{name} / signal = {ratio:.4g}, not O({want:g}) — the term "
-                f"is not the order in eps its ink weight says it is")
+                f"is not the order in eps the figure's words say it is")
 
     # --- the layout, which depends on runtime font metrics ------------------
     # 3. The builder does not solve gloss collisions (its doctrine: report,
@@ -318,13 +339,13 @@ def assertions(g):
             c.check(clear > 0.0,
                     f"the brace overlaps term {k}: {clear:.2f} px")
 
-    # 6. The frame identity the whole layout rests on: one math unit is one
-    #    READING px, i.e. px_per_unit / ink_scale == 1. If xlim, the format or
-    #    the padding drifts, every measured width above becomes a lie.
-    scale = sch.px_per_unit(g["xlim"], WIDE.display_width_px, p["pad_frac"])
-    c.check(abs(scale / WIDE.ink_scale - 1.0) < 1e-9,
-            f"one math unit is {scale / WIDE.ink_scale:.4f} reading px, not 1 — "
-            f"the typeset widths no longer match the page")
+    # 6. The row fits the slot. This is the check that carries the whole
+    #    reading-px frame: row_w is a sum of runtime typeset widths and
+    #    units_across comes from FORMAT, so a wider gloss set, a longer left
+    #    side, or a smaller declared format all fail here. (There was also a
+    #    `px_per_unit / ink_scale == 1` assert; it was an identity — xlim is
+    #    constructed from exactly the quantities the gate recomputed — and
+    #    identities are theater.)
     c.check(g["row_w"] <= g["units_across"],
             f"the row is {g['row_w']:.0f} reading px wide and the slot carries "
             f"{g['units_across']:.0f} — cut a term or shorten the left side")
