@@ -43,6 +43,10 @@ class Curve:
     # was drawn before it (cartographic casing). Skipped on transparent
     # themes; ignored with width_profile.
     casing: bool = False
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,10 @@ class FilledCurve:
     # grain INSIDE the fill: 0 = none, else opacity of the grain tile
     # overlaid on this shape (skipped on transparent themes)
     grain: float = 0.0
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
     def __post_init__(self) -> None:
         if self.gradient is not None and self.pattern is not None:
@@ -109,6 +117,10 @@ class Vector:
     # False -> ghost copy: paper-filled head and shaft outline (the
     # white-original / black-image convention of amplitwist figures)
     filled: bool = True
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 @dataclass
@@ -118,6 +130,10 @@ class Point:
     filled: bool = True
     radius_scale: float = 1.0
     color: str | None = None       # fill/stroke override, same convention as Curve.color
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 @dataclass
@@ -141,6 +157,10 @@ class MathLabel:
     # this label's position IS meaning (e.g. text along a curve): the
     # auto-place pass never moves it, collisions fall to the gate
     pin: bool = False
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 @dataclass
@@ -150,6 +170,10 @@ class RightAngleMark:
     dir2: XY
     size: float                    # side length in math units
     role: Role = Role.ANNOTATION
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 @dataclass
@@ -159,6 +183,10 @@ class AngleMark:
     dir2: XY
     radius: float                  # math units
     role: Role = Role.ANNOTATION
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 @dataclass
@@ -172,6 +200,10 @@ class Brace:
     depth: float | None = None     # math units; None -> 6% of the span
     label: str | None = None
     role: Role = Role.ANNOTATION
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
     def frame(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
         """(midpoint, unit tangent, unit normal toward the bulge, depth) —
@@ -198,6 +230,10 @@ class Callout:
     role: Role = Role.ANNOTATION
     boxed: bool = True
     size_pt: float | None = None
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 @dataclass
@@ -225,6 +261,10 @@ class RasterField:
     vmax: float | None = None
     opacity: float = 1.0
     interp: bool = False           # False -> image-rendering: pixelated
+    # correspondence name: the marks that ARE the same object across the
+    # parts of a composite figure share a key. Renders nothing; it is what
+    # correspond.py measures the residual against.
+    key: str | None = None
 
 
 Item = (Curve | FilledCurve | Vector | Point | MathLabel | RightAngleMark

@@ -162,6 +162,40 @@ The rule that keeps the architecture clean: **new capability enters as a
 producer of scene items, never as a new renderer.** surface3d proved the
 pattern.
 
+## Composites (correspond.py)
+
+`Figure/Panel/Connector` places the parts of a composite and draws a
+squiggle between them. It does not know what the squiggle *asserts* — and
+a composite's claim is never a picture, it is a predicate over a binding
+(exposition.md, "Composites"). So the relation is declared, not drawn:
+
+- **The binding is a name on the geometry.** `Curve(..., key="unit-circle")`,
+  or `keyed("branch", *plots.series(...))` for the producers that emit a
+  group. Items sharing a key ARE the same object. Written where the
+  geometry is built, so the two halves cannot drift apart the way
+  retyped literals do.
+- **`CORRESPONDENCE = [Correspondence(parts, varies, changes, frame)]`**
+  at module level names the parts, the one axis of variation in prose,
+  and the keys allowed to move.
+- **The gate reports the residual**: a key that differs and was not
+  declared; a key declared in `changes` that never actually moves (the
+  figure states a difference it does not draw); page-scale drift across a
+  shared frame; and — surviving a declared rescale — the fixed set drawn
+  at two sizes.
+
+Position is deliberately outside the fingerprint (moving is usually the
+claim), and so is opacity (a legibility channel, not an identity one).
+The declaration is fully silent when a program has none, so independent
+panels are never forced to invent a relation. And there is no `kind=`:
+before/after, transport, instance-in-family and analogy are settings of
+(binding, variation), not types — see exposition.md for why naming them
+would be the overfit.
+
+Scope: multi-panel `Figure`s. Single-scene composites — a ghosted
+pre-image, a word-scale inset — bind within one Scene and need a selector
+for "part" that does not exist yet; `diffusion_ode_vs_sde` is the corpus
+figure waiting on it.
+
 ## The thinking layer (what actually decides quality)
 
 Everything above is plumbing. Quality is decided before code, by the
@@ -208,6 +242,11 @@ behind each step lives in exposition.md; the steps, in order:
    THE object (accent), what is scaffolding (construction ink). The
    quantity carrying the claim gets the top of the perceptual hierarchy
    (position > length > slope > area > shading).
+7b. **Binding (composites only).** If the figure has parts, what is the
+   same object across them, and what is the ONE thing that varies? Key
+   the shared objects; declare `varies` and `changes`. If more than one
+   thing differs, the reader cannot attribute either — cut until one
+   does. The fixed set gets one page size.
 8. **Honesty pass.** What does the depiction lie about (truncated
    infinities, selected seeds, unequal panel scales)? Admit each on the
    figure or fix it. Then audit the *accidental* assertions: what do

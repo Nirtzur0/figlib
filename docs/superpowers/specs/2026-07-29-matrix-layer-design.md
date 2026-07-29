@@ -64,7 +64,38 @@ legs, not a 2-D shape to draw to scale; forcing it into `Block` would
 corrupt the shape-is-geometry invariant. Separate spec, against
 `schematic.py`.
 
-## 0. Merged with the signals & linear-algebra spec
+## 0a. Revision: the merge is withdrawn
+
+The signals plan finished without building `matrix.py` at all.
+`dft_matrix_basis.py` does its cell geometry inline — a two-line `center`
+closure and a three-line bracket construction — and states the case in its
+docstring: *"matrices need no primitive, only addresses."* That is a
+correct application of the doctrine (add a primitive only when a device is
+*inexpressible*, never when merely verbose), and the figure passes its
+gates.
+
+So the merge described in §0b below is withdrawn. `CellGrid` was never
+built and now has no consumer, and importing its surface into `Block` on
+speculation would be API for zero call sites. **Cut: `aspect`, `map_into`,
+`edge`, `grid_lines`, `brackets`, `cell_fills`, `check_square_cells`.**
+`cell` returns to a scalar, so shape-as-aspect-ratio is unconditional
+again — which is strictly stronger than the `aspect`-with-opt-out version.
+
+What survives the same argument, and why the layer is still worth
+building: **their argument holds for addressing and fails for gating.** A
+`center(n, k)` closure is genuinely cheap to rewrite per figure. A gate is
+not — `check_expr` evaluates a drawn factorization and `check_conformable`
+reads inner dimensions off the drawn term list, and neither can exist as
+local arithmetic inside one figure, because a gate is the shared oracle.
+Those gates need shape and values to be one object that survives from
+`compute()` into `assertions()`. That object is `Block`, and nothing
+smaller does the job.
+
+Retained from the signals spec: `diagonal(b, offset, wrap=False)`, because
+circulant wrap is real index arithmetic that is easy to get wrong and it
+costs three lines.
+
+## 0b. Merged with the signals & linear-algebra spec (superseded by §0a)
 
 `2026-07-29-signals-linalg-design.md` independently specified `CellGrid`
 in the same new module `src/figlib/matrix.py`: the same frozen, draws-

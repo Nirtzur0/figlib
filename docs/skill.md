@@ -148,6 +148,37 @@ Layout is dumb affine slots — the mechanical gate catches what collides,
 figure-wide. Correspondence hues must hold ACROSS panels; the color
 gate pools them.
 
+**A composite's claim is the diff, not either panel.** So declare the
+binding and let the gate find the leaks (`correspond.py`):
+
+```python
+s.add(Curve(unit_circle, role=Role.CONSTRUCTION, key="unit-circle"))
+s.add(*keyed("branch", *plots.series(r, x_stable)))     # producer groups
+
+CORRESPONDENCE = [Correspondence(
+    parts=(0, 1),
+    varies="the map z -> z^2 applied to every drawn object",
+    changes=("tracked-ray", "z0"),   # the ONLY keys allowed to move
+)]
+```
+
+Items sharing a `key` are the same object. Everything keyed and not in
+`changes` must match across the parts — differing role, hue, dash,
+fill, or label text is a **residual**: a second difference the reader
+cannot attribute, which is the mechanical reason composites fail to
+click. A key in `changes` that never actually moves fails too — the
+figure claims a difference it does not draw.
+
+Traps this catches, both found in figures that passed every other gate:
+- Panels at different page scales. Fine for lengths in general if you
+  say why in `frame=` — but never for the objects you declared fixed.
+  Drawing the invariant at two sizes contradicts the invariance claim.
+- A binding written twice (guide rails, panel tags, locator positions
+  retyped from `PARAMS`). Derive them from the one source.
+
+Silent when a program declares no `CORRESPONDENCE`, so panels that are
+genuinely independent are not forced to invent a relation.
+
 ## Distilled traps (mined from ~800k tokens of builder transcripts)
 
 Each line below cost a builder agent a full render-inspect-fix loop.

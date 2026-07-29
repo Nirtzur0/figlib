@@ -164,6 +164,62 @@ exits, and adjacency controls the path. Script it before drawing.
   figures mislead. The honesty pass covers deliberate lies; this
   covers accidental ones.
 
+## Composites: two things that click
+
+Many of the strongest explainers are not one representation but two that
+lock together — the phase portrait beside the bifurcation diagram, the
+z-plane beside its image, the redrawn-familiar beside the unfamiliar, the
+bound instance inset in the abstract map. Above, that mechanism is spread
+across five separate rules (change representation, draw the
+correspondence between rungs, scaffold with a redrawn familiar, proof by
+transport, ∀ as a population). They are one object, and naming the five
+was overfitting to the corpus we had.
+
+> **A composite's claim is a predicate over a correspondence.** It is
+> never "here are two pictures." One panel is not the claim; the *diff*
+> across a stated binding is the claim.
+
+Three slots decide whether it clicks:
+
+1. **The binding** — which marks in one part ARE the same object as marks
+   in another. Named, not implied: items that share a `key` are the same
+   object (`correspond.py`). This is "color as referential noun"
+   (corpus-study #5) with color removed, so hue becomes one *rendering*
+   of correspondence rather than its only carrier — which lifts the
+   4-slot `correspondence_cap` for identity while keeping it for visual
+   identity.
+2. **The declared variation** — the one thing the binding does not
+   preserve, plus which keys are allowed to move. Prose; unchecked by
+   machine on purpose (the readback checks it).
+3. **The residual** — every OTHER difference across the binding. This is
+   why composites fail: two things changed, so the reader cannot
+   attribute either. It is computable, so it is computed.
+
+Invariance-claims and difference-claims are the same object with the
+reader's attention pointed at the surviving vs. the changed half;
+transport is a binding whose second part is chosen because the claim is
+trivial there; grounding is a binding with a singleton on one side;
+analogy is a binding to a picture the reader already owns. Do not add
+`kind=` to the declaration — naming the patterns freezes the vocabulary
+at today's corpus. Name the axes; let the patterns be whatever clusters
+in the declarations.
+
+Two consequences worth stating separately, because both were found by
+running the check over figures that already passed every other gate:
+
+- **The fixed set must be drawn at one page size.** `demo_panels_zsquared`
+  drew the unit circle — the one object z² leaves alone — at 302 px in
+  the domain panel and 181 px in the image panel, because the slot widths
+  were hand-picked. The figure's own invariant visibly changed size. A
+  declared rescale buys length comparison in general; it can never buy
+  the objects the figure declared unchanged.
+- **A binding written twice is a binding that will drift.**
+  `strogatz_saddle_node` located its three phase panels on the
+  bifurcation diagram with `for rv in (-1.0, 1.0)` — literals retyped
+  from `PARAMS["panel_r"]`, with the panel tags retyped again beside
+  them. Nothing checked that panel [a] was the r = −1 phase line. Derive
+  the locator from the same source the panels come from.
+
 ## Reader effort
 
 The literatures conflict here — cognitive load theory wants zero reader

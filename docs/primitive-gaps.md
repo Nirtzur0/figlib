@@ -225,6 +225,105 @@ register channel is free for us; every figure is currently all-serif-math.
 desaturated, for "same object, not the subject" (`induction_head_circuit`
 uses it for the non-accented ensemble).
 
+## Transcript distillation, round 2 (measured, not recalled)
+
+Mined all 14 session logs plus 41 subagent logs: **4.2M output tokens, 55
+agents, 173 edits to figure programs**. Method and script shape matter
+more than the numbers, so: parse the JSONL, reconstruct per-figure
+`edit -> figcheck -> verdict` sequences, cluster diagnostic lines
+verbatim, and split edits at each figure's FIRST PASS.
+
+**The finding that survived checking.** Raw counts say `faint-ink` is 83%
+of all diagnostics (260 events). That is a trap. Bucketed by hour, 196 of
+them fall inside a single hour and carry `floor 1.5` — a floor that no
+longer exists (it is 1.3 now, re-anchored on RISO's dotted frame at
+1.44:1). That was ONE systemic ramp/theme defect hit ~200 times and then
+fixed at the theme level. It is already compiled in and is not an
+opportunity. *A frequency count over a transcript corpus measures how long
+a bug lived, not how much a class of work costs.* Bucket by time and check
+whether the constant still exists before believing any of it.
+
+**What is actually durable.** 66 of 173 figure-program edits (**38%**)
+touch label placement, and unlike faint-ink they are spread evenly across
+every figure in the corpus. 16 are pure numeric nudges — identical code,
+only the numbers moved. And **50% of all figure edits land AFTER the
+figure's first PASS**: the gates are ceilings, so passing them says
+"not broken", never "done", and the remaining loop is the agent looking
+at a PNG and judging.
+
+`autoplace` already closes the easy half (an un-pinned label that collides
+gets a verified `offset_px` nudge). The expensive half is a label whose
+position IS a parameter of the geometry — text set along an arc, a tag at
+a fraction of a curve. Those are `pin=True` by construction, `autoplace`
+is forbidden to move them, so they get hand-searched. One figure spent
+four render cycles settling a single radius (1.17 -> 1.32 -> 1.40 -> 1.52)
+with the clearance arithmetic done in prose each round.
+
+**`place.py` (landed).** `place_on_locus` scans an author-stated locus and
+returns the point with the most room, plus the achieved clearance as a
+number the program can assert on; `label_clearance` answers "how much room
+does this label have" so it stops being computed by hand. The split is the
+doctrine's: the author chooses the LOCUS (meaning), the library chooses the
+POINT on it (a 1-D scan with one answer, same species as `boundary_toward`),
+and the gate holds the result.
+
+*Its boundary, found by trying it on the figure that motivated it and
+failing.* Retrofitting VCA Fig [19] did not work and was reverted:
+- Placements are **greedy and sequential** — each becomes an obstacle for
+  the next, so two words on competing loci starve each other, and the
+  answer depends on order. The hand-tuning had solved them jointly.
+- Under **free rotation** the objective misbehaves: maximizing clearance
+  happily picks an orientation whose AABB is enormous but sits in a void.
+- Everything measures **rotated AABBs**, so a word at 39° cannot fit a
+  pocket that its glyphs would clear easily.
+So v1 is honestly scoped to ONE label on a locus, which is the common
+case. Jointly-placed sets stay hand-authored. Fixing this properly means
+either tight glyph-hull clearance or a joint pass, and a joint pass is the
+constraint solver this doctrine forbids — so it needs a decision, not a
+patch.
+
+**The post-PASS loop, classified — and a refuted hypothesis.** The "50% of
+edits land after first PASS" number is real but does NOT mean 50% waste.
+Classifying those 40 edits (this session's own excluded) by what they
+changed:
+
+| share | class | gateable? |
+|---|---|---|
+| 32% | structure / new content — annotations added, geometry reworked | no: design |
+| 22% | ink / style channel | mostly no (see below) |
+| 19% | label placement | partly — `place.py`, `autoplace` |
+| 17% | params / geometry, pure numeric | partly — some already `arrow-on-mark` |
+| 10% | exposition, assertions, imports | no |
+
+The hypothesis on the table was a **salience gate**: declare the claim's
+subject, rank ink groups by weight x length x contrast, assert the subject
+ranks first. Reading all 9 ink/style edits verbatim kills it. They are:
+occlusion correctness (a fill opacity raised so the cylinder actually
+hides what is behind it), theme-routing hygiene (`as_floor`), a contrast
+fix the colour gate *had already caught* (0.55 -> 0.75, "2.19:1 on
+white"), dash-as-honesty (a chord inside the sphere), a private-to-public
+API swap, and exactly ONE micro-tuning of weight and dash period. **One of
+forty edits was a salience adjustment.** A gate for it would fire almost
+never and would add a declaration to every figure to catch it.
+
+So: the post-PASS loop is mostly irreducible design work plus gates
+correctly catching regressions the author introduced after the first PASS.
+That is the loop working, not waste. Do not build a "done" gate; the
+compressible parts (labels, some numeric nudges) are already being
+attacked directly, and the rest is the job.
+
+*Instrument caveat:* the classifier keys on which tokens changed and
+misfiles some edits (one assertions rewrite landed in ink/style). Treat
+the shares as +/-5% and re-read the verbatim samples before acting on any
+of them — the verbatim read is what refuted the hypothesis, not the table.
+
+**A cheap API-gap signal, worth automating.** When a figure program
+imports an underscore-prefixed figlib symbol, that is a missing public
+parameter. It happened twice (`_emit`, `_split_signed` in the sphere demo,
+both later replaced by `drape(..., signed=)`). Grepping `figures/` for
+`import.*\b_[a-z]` is a one-line lint that turns a private-symbol reach
+into a public-API to-do.
+
 ## Build order
 
 1. Curve markers + line-style channel + open-arrow flag (one sitting;

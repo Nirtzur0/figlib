@@ -14,6 +14,7 @@ WRITING A FIGURE
     theme       CLEAN | RISO; ink(Role), ramp, categorical, surface_shade
     format      MARGIN | COLUMN | WIDE page slots; canvas units are CSS px
     figure      Figure/Panel/Connector — multi-panel page grammar
+    correspond  Correspondence — what a composite holds fixed; the residual
     geometry    compute-layer numerics that generate geometry
     builders    compute-side emitters (grids, streamlines, level ladders)
     plots       data plots as scene items: Axes, scales, series, bands

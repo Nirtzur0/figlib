@@ -12,3 +12,4 @@ figures/out/*.zoom.png
 # agent/tool scratch
 .playwright-mcp/
 /f0.png
+.claude/

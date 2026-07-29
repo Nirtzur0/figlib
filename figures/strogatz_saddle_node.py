@@ -58,8 +58,9 @@ import numpy as np
 from figlib import plots
 from figlib.figure import Figure, Panel, layout_figure
 from figlib.format import WIDE
+from figlib.correspond import Correspondence, keyed
 from figlib.gates import Checks
-from figlib.scene import Curve, MathLabel, Scene
+from figlib.scene import Curve, MathLabel, Point, Scene
 from figlib.style import Role
 from figlib.theme import RISO
 
@@ -149,6 +150,8 @@ def compute(p):
 
 # --- build ------------------------------------------------------------------
 
+PANEL_TAGS = ("[a]", "[b]", "[c]")
+
 DOT_PX = 6.5          # fixed-point dot radius, canvas px
 TICK_PX = 6.0
 
@@ -167,13 +170,21 @@ def _phase_panel(s: Scene, pan: dict, g: dict, upx: float, upy: float,
                       role=Role.ANNOTATION))
 
     # the graph of f, and the phase line it crosses, at one location
-    s.add(Curve(np.column_stack([pan["par_x"], pan["par_y"]]), role=Role.CONTENT))
+    s.add(Curve(np.column_stack([pan["par_x"], pan["par_y"]]),
+                role=Role.CONTENT, key="parabola"))
     fixed = [plots.FixedPoint(float(x), st)
              for x, st in zip(pan["fixed"], pan["stable"])]
-    s.add(*plots.phase_line(fixed, pan["arrows"], xlim=(x0, x1), y=0.0,
+    line = plots.phase_line(fixed, pan["arrows"], xlim=(x0, x1), y=0.0,
                             dot=(DOT_PX * upx, DOT_PX * upy), spine_arrow=True,
                             spine_role=Role.ANNOTATION, dot_role=Role.CONTENT,
-                            arrow_role=Role.ACCENT1, arrow_width=1.1))
+                            arrow_role=Role.ACCENT1, arrow_width=1.1)
+    # phase_line emits one group; the roles it was given are what tells the
+    # three objects apart (a dot is a Curve or a FilledCurve, not a Point).
+    # The spine is the frame all three panels share, so it is bound; the
+    # dots and the flow are what r moves.
+    s.add(*keyed("state-axis", *(i for i in line if i.role is Role.ANNOTATION)))
+    s.add(*keyed("flow", *(i for i in line if i.role is Role.ACCENT1)))
+    s.add(*keyed("fixed-points", *(i for i in line if i.role is Role.CONTENT)))
     if first:
         s.add(MathLabel("x", (x1, 0.0), role=Role.ANNOTATION, ha="left",
                         va="center", offset_px=(9.0, 0.0)))
@@ -182,7 +193,7 @@ def _phase_panel(s: Scene, pan: dict, g: dict, upx: float, upy: float,
     # directly under it, haloed over the xdot axis it straddles — the
     # parameter reads as a measured height, not as a panel title.
     s.add(MathLabel(f"r = {r:.0f}", (0.0, r), role=Role.ANNOTATION, ha="center",
-                    va="top", offset_px=(0.0, 10.0), halo=True))
+                    va="top", offset_px=(0.0, 10.0), halo=True, key="r"))
 
     # roots named by the theorem, not by their values; panel (b) inherits
     # the naming from (a) — the merged root needs no second label to say
@@ -190,10 +201,10 @@ def _phase_panel(s: Scene, pan: dict, g: dict, upx: float, upy: float,
     if r < 0:
         s.add(MathLabel(r"-\sqrt{-r}", (float(pan["fixed"][0]), 0.0),
                         role=Role.CONTENT, ha="right", va="top",
-                        offset_px=(-4.0, 7.0)))
+                        offset_px=(-4.0, 7.0), key="fixed-points"))
         s.add(MathLabel(r"+\sqrt{-r}", (float(pan["fixed"][1]), 0.0),
                         role=Role.CONTENT, ha="left", va="top",
-                        offset_px=(4.0, 7.0)))
+                        offset_px=(4.0, 7.0), key="fixed-points"))
 
 
 def _bifurcation_panel(s: Scene, g: dict, upx: float, upy: float) -> None:
@@ -201,8 +212,13 @@ def _bifurcation_panel(s: Scene, g: dict, upx: float, upy: float) -> None:
     rx, ry = DOT_PX * upx, DOT_PX * upy
     guide_top, guide_bot = x_sc.hi * 0.96, x_sc.lo * 0.96
 
-    for rv in (-1.0, 1.0):
-        s.add(Curve(np.array([[rv, guide_bot], [rv, guide_top]]), role=Role.FRAME))
+    # the rails locate the phase panels ON the diagram. Derived from the same
+    # PARAMS the panels are built from: retyped literals here silently lied
+    # the moment panel_r changed. r = 0 needs none — it IS the x axis.
+    for rv in g["p"]["panel_r"]:
+        if abs(rv) > 1e-12:
+            s.add(Curve(np.array([[rv, guide_bot], [rv, guide_top]]),
+                        role=Role.FRAME))
     s.add(*plots.axis(r_sc, orient="x", at=0.0, ticks=r_sc.ticks(step=0.5),
                       tick_len=TICK_PX * upy, skip=(0.0,), label="r",
                       extend=(0.05, 0.12), role=Role.ANNOTATION))
@@ -219,22 +235,26 @@ def _bifurcation_panel(s: Scene, g: dict, upx: float, upy: float) -> None:
     s.add(*plots.series(g["rb"], g["x_unstable"], role=Role.CONTENT,
                         width_scale=1.15, dash="dashed"))
 
-    # the instances, sitting on their own slices: panel (a)'s two dots
-    s.add(*plots.markers([-1.0], [-1.0], size=(rx, ry), filled=True,
-                         role=Role.CONTENT))
-    s.add(*plots.markers([-1.0], [1.0], size=(rx, ry), filled=False,
-                         role=Role.CONTENT))
-    # panel (b)'s half-stable point, the same glyph, in the accent
-    s.add(*plots.phase_line([plots.FixedPoint(0.0, None)], np.empty((0, 2)),
-                            xlim=(0.0, 0.0), y=0.0, dot=(rx, ry), spine=False,
-                            dot_role=Role.ACCENT2))
+    # the instances, sitting on their own slices — the fixed points of each
+    # phase panel replotted at that panel's r, from the panel's own geometry
+    for pan in g["panels"]:
+        rv = pan["r"]
+        for xv, st in zip(pan["fixed"], pan["stable"]):
+            if st is None:                      # half-stable: the bifurcation
+                s.add(*plots.phase_line([plots.FixedPoint(float(rv), None)],
+                                        np.empty((0, 2)), xlim=(rv, rv),
+                                        y=float(xv), dot=(rx, ry), spine=False,
+                                        dot_role=Role.ACCENT2))
+            else:
+                s.add(*plots.markers([rv], [float(xv)], size=(rx, ry),
+                                     filled=bool(st), role=Role.CONTENT))
 
-    s.add(MathLabel(r"[a]", (-1.0, guide_top), role=Role.ANNOTATION,
-                    ha="center", va="bottom", offset_px=(0.0, -5.0)))
-    s.add(MathLabel(r"[b]", (0.0, guide_top), role=Role.ANNOTATION,
-                    ha="right", va="bottom", offset_px=(-12.0, -5.0)))
-    s.add(MathLabel(r"[c]", (1.0, guide_top), role=Role.ANNOTATION,
-                    ha="center", va="bottom", offset_px=(0.0, -5.0)))
+    # panel tags at the r they name, from the same list, so the tag and the
+    # rail cannot drift apart from each other or from the panel
+    for tag, rv in zip(PANEL_TAGS, g["p"]["panel_r"]):
+        s.add(MathLabel(tag, (rv, guide_top), role=Role.ANNOTATION,
+                        ha="right" if abs(rv) < 1e-12 else "center", va="bottom",
+                        offset_px=(-12.0 if abs(rv) < 1e-12 else 0.0, -5.0)))
     # branch names sit just outside their own branch, near enough that the
     # nearest curve is unambiguous (contiguity, Mayer d ~ 1.1)
     s.add(MathLabel(r"-\sqrt{-r}\ \ \text{stable}", (-0.86, -1.18),
@@ -245,6 +265,19 @@ def _bifurcation_panel(s: Scene, g: dict, upx: float, upy: float) -> None:
                     ha="left", va="center"))
     s.add(MathLabel(r"\text{saddle-node}", (0.10, -0.42), role=Role.ACCENT2,
                     ha="left", va="center"))
+
+
+CORRESPONDENCE = [
+    Correspondence(
+        parts=(0, 1, 2),
+        varies="the parameter r, which rides the parabola up through the axis",
+        # the parabola and the state axis are the frame the reader reads the
+        # change against; only r and what r does to the fixed points move.
+        # Panel [d] is not bound to these: it plots (r, x*), a different
+        # space, and its rails locate the panels rather than repeat them.
+        changes=("r", "fixed-points"),
+    ),
+]
 
 
 def build(g):

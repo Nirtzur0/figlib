@@ -56,7 +56,8 @@ class Report:
         lines = [f"[{status}] {self.name}: {self.claim}", f"  svg: {self.svg_path}", f"  png: {self.png_path}"]
         lines += [f"  {n}" for n in self.notes]
         lines += [f"  {d.kind}: {d.detail}" for d in self.diagnostics]
-        lines += [f"  expressivity: {s}" for s in self.signals]
+        # signals are self-labelling ("expressivity: ...", "clearance: ...")
+        lines += [f"  {s}" for s in self.signals]
         return "\n".join(lines)
 
 
@@ -118,6 +119,13 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
                       autoplace_figure(built, style, width_px=width_px)]
         diags += mechanical_figure(built, style, width_px=width_px)
         diags += color_gate_figure(built, style)
+        # Composite figures only: the residual against a declared binding.
+        # Silent when a program declares none, so a figure whose parts are
+        # independent is not forced to invent a relation between them.
+        corrs = getattr(mod, "CORRESPONDENCE", None)
+        if corrs:
+            from .correspond import residual
+            diags += residual(built, corrs, style, width_px=width_px)
         svg_path, png_path = save_figure(built, out / stem, style, width_px=width_px)
     else:
         if place:
@@ -140,7 +148,12 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
         diags = [Diagnostic(d.kind, f"{d.detail} [computed: {hint}]")
                  if d.kind in load_kinds else d for d in diags]
     from .expressivity import signals as expressivity_signals
-    sigs = expressivity_signals(built, style, width_px)
+    from .place import clearance_signal
+    sigs = [f"expressivity: {s}"
+            for s in expressivity_signals(built, style, width_px)]
+    # "does this label touch that stroke?" — asked by 212 PNG looks across
+    # the corpus, answered by a number. Rides every run, not a flag.
+    sigs += clearance_signal(built, style, width_px)
     return Report(mod.__name__, mod.CLAIM, svg_path, png_path, diags,
                   built=built, style=style, width_px=width_px, notes=notes,
                   signals=sigs)

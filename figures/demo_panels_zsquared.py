@@ -8,8 +8,10 @@ radius, while the dashed unit circle stays put.
 
 import numpy as np
 
+from figlib.correspond import Correspondence
 from figlib.figure import Connector, Figure, Panel
 from figlib.format import WIDE
+from figlib.layout import geometry_extents
 from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene
 from figlib.style import Role
 from figlib.theme import RISO
@@ -80,7 +82,9 @@ def _panel(g, mapped: bool) -> Scene:
         s.add(Curve(ray, role=Role.MUTED, width_scale=0.8))
     for r, arc in zip(g["radii"], arcs):
         if abs(r - 1.0) < 1e-9:
-            s.add(Curve(arc, role=Role.CONSTRUCTION))       # the fixed unit circle
+            # the fixed unit circle: r = r^2 only here, so it is the one
+            # object the map leaves alone — the anchor of the binding
+            s.add(Curve(arc, role=Role.CONSTRUCTION, key="unit-circle"))
         elif abs(r - g["r0"]) > 1e-9:
             s.add(Curve(arc, role=Role.MUTED, width_scale=0.8))
     # sector boundary: the two edge rays and the outer arc
@@ -89,31 +93,61 @@ def _panel(g, mapped: bool) -> Scene:
           Curve(arcs[-1], role=Role.CONTENT, width_scale=1.15))
     # the tracked objects, hue-matched across panels, oriented; marker
     # fractions chosen clear of the marked point z_0
-    s.add(Curve(ray0, role=Role.ACCENT1, width_scale=1.2,
+    s.add(Curve(ray0, role=Role.ACCENT1, width_scale=1.2, key="tracked-ray",
                 arrows=(0.78,) if mapped else (0.45,)))
     # 0.30: the arrow-on-mark gate found 0.28 landing on the '2\theta_0' label
-    s.add(Curve(circ0, role=Role.ACCENT2, width_scale=1.2, arrows=(0.30,)))
-    s.add(Point(tuple(z0), role=Role.CONTENT, radius_scale=0.9))
-    s.add(Point((1.0, 0.0), role=Role.CONTENT, radius_scale=0.7))
+    s.add(Curve(circ0, role=Role.ACCENT2, width_scale=1.2, arrows=(0.30,),
+                key="tracked-circle"))
+    s.add(Point(tuple(z0), role=Role.CONTENT, radius_scale=0.9, key="z0"))
+    s.add(Point((1.0, 0.0), role=Role.CONTENT, radius_scale=0.7, key="fixed-1"))
 
     th0 = 2 * g["th0"] if mapped else g["th0"]
-    s.add(AngleMark((0, 0), (1, 0), (np.cos(th0), np.sin(th0)), radius=0.16 * r_out))
+    s.add(AngleMark((0, 0), (1, 0), (np.cos(th0), np.sin(th0)),
+                    radius=0.16 * r_out, key="tracked-ray"))
     lab = r"2\theta_0" if mapped else r"\theta_0"
     lr = 0.24 * r_out
     s.add(MathLabel(lab, (lr * np.cos(th0 / 2), lr * np.sin(th0 / 2)),
-                    ha="left", va="center", size_pt=10, role=Role.ANNOTATION))
+                    ha="left", va="center", size_pt=10, role=Role.ANNOTATION,
+                    key="tracked-ray"))
     s.add(MathLabel(r"z_0^2" if mapped else r"z_0", tuple(z0),
-                    ha="left", va="bottom", offset_px=(5, -5)))
+                    ha="left", va="bottom", offset_px=(5, -5), key="z0"))
+    # haloed: the radius label belongs ON the axis at the circle's foot
+    # (contiguity), and at the shared page scale that spot carries grid ink
     s.add(MathLabel(r"r_0^2" if mapped else r"r_0", (circ0[0, 0], 0.0),
-                    ha="center", va="top", offset_px=(0, 8), role=Role.ACCENT2))
-    s.add(MathLabel(r"1", (1.0, 0.0), ha="center", va="top", offset_px=(8, 8)))
+                    ha="center", va="top", offset_px=(0, 8), role=Role.ACCENT2,
+                    halo=True, key="tracked-circle"))
+    s.add(MathLabel(r"1", (1.0, 0.0), ha="center", va="top", offset_px=(8, 8),
+                    key="fixed-1"))
     return s
 
 
+CORRESPONDENCE = [
+    Correspondence(
+        parts=(0, 1),
+        varies="the map z -> z^2 applied to every drawn object",
+        # what the map moves: the tracked ray doubles its angle, the tracked
+        # circle squares its radius, z_0 goes to z_0^2. The unit circle and
+        # the point 1 are NOT here — they are the fixed set, and the figure
+        # fails if they ever stop matching.
+        changes=("tracked-ray", "tracked-circle", "z0"),
+    ),
+]
+
+
 def build(g):
+    # Slot widths are DERIVED so the two panels land on one page scale.
+    # At the hand-picked 0.44/0.56 the unit circle — the one object z^2
+    # fixes — was drawn at 302 px in [a] and 181 px in [b]: the figure's
+    # own invariant, visibly changing size. Splitting the row in the ratio
+    # of the panels' extents puts both at 220 px, so "maps to itself" is
+    # something the reader can see rather than take on trust.
+    a, b = _panel(g, mapped=False), _panel(g, mapped=True)
+    dx_a = np.ptp(geometry_extents(a)[0])
+    dx_b = np.ptp(geometry_extents(b)[0])
+    frac_b = dx_b / (dx_a + dx_b)
     return Figure(
-        panels=[Panel(_panel(g, mapped=False), tag=r"[a]"),
-                Panel(_panel(g, mapped=True), tag=r"[b]", width_frac=0.56)],
+        panels=[Panel(a, tag=r"[a]", width_frac=1.0 - frac_b),
+                Panel(b, tag=r"[b]", width_frac=frac_b)],
         connectors=[Connector(0, 1, kind="map", label=r"z^{2}")],
     )
 

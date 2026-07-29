@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         print(layout_report(report.built, report.style, report.width_px))
     if args.readback_prompt:
         print("\n--- readback prompt ---")
-        print(prompt_for(report.png_path))
+        print(prompt_for(report.png_path, report.built))
     if args.zoom:
         _zoom_main(report, args.zoom)
     return 0 if report.passed else 1

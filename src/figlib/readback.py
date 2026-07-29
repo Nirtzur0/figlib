@@ -40,6 +40,26 @@ misses the claim has a macro-structure failure even if the studied
 read recovers it.
 """
 
+# Asked only of composites. The residual check (correspond.py) measures
+# the differences it can see in the scene; this measures the ones a reader
+# sees, which is the actual definition of the figure failing to click.
+# A second difference named here that the program did not declare is the
+# residual leaking through a channel no gate reaches.
+BINDING_QUESTIONS = """\
+
+BINDING (this figure has {n} parts):
+5. What is held the SAME across the parts — which marks are the same
+   object seen more than once?
+6. What is DIFFERENT? List every difference you notice, not just the one
+   that seems intended.
+7. Which single difference does the figure appear to be arguing about?
+"""
+
+
+def _n_parts(built: object) -> int:
+    panels = getattr(built, "panels", None)
+    return len(panels) if panels else 0
+
 
 @dataclass
 class ReadbackRecord:
@@ -58,8 +78,13 @@ class ReadbackRecord:
         )
 
 
-def prompt_for(png_path: str | Path) -> str:
-    return READBACK_PROMPT.format(png_path=png_path)
+def prompt_for(png_path: str | Path, built: object = None) -> str:
+    """The cold-reader prompt, plus the binding questions when the figure
+    is a composite — the only check on `Correspondence.varies`, which is
+    prose and therefore unreachable by any deterministic gate."""
+    prompt = READBACK_PROMPT.format(png_path=png_path)
+    n = _n_parts(built)
+    return prompt + BINDING_QUESTIONS.format(n=n) if n > 1 else prompt
 
 
 def record(png_path: str | Path, rec: ReadbackRecord) -> Path:
