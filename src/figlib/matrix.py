@@ -150,17 +150,20 @@ def _nm(b: Block) -> str:
 # correspondence order, four slots on RISO.
 
 def outline(b: Block, *, role: Role = Role.CONTENT,
-            wash: float = 0.0) -> list:
+            wash: float = 0.0, width_scale: float = 1.0) -> list:
     """The matrix as one whole: a closed rim, optionally over a MUTED wash.
 
     `wash` is the "unstructured whole" reading — a matrix with no internal
-    structure yet asserted.
+    structure yet asserted. `width_scale` takes the `style.WEIGHT_*`
+    levels: in a row of matrices, the ones the claim is about should
+    dominate the ones that are context.
     """
     items: list = []
     if wash > 0.0:
         items.append(FilledCurve(b.rect(), role=Role.MUTED, opacity=wash,
                                  outline=False))
-    items.append(Curve(b.rect(), role=role, closed=True))
+    items.append(Curve(b.rect(), role=role, closed=True,
+                       width_scale=width_scale))
     return items
 
 
@@ -270,24 +273,43 @@ def causal(b: Block) -> np.ndarray:
     return tri(b, "lower", 0)
 
 
-def rank1(b: Block, j: int, i: int, *, col_color: str | None = None,
-          row_color: str | None = None, role: Role = Role.CONTENT,
-          ground: float = 0.12) -> list:
-    """The outer product mark: the whole rectangle as a faint ground,
-    crossed by column `j` and row `i`.
+def rank1(b: Block, u: np.ndarray, v: np.ndarray, *,
+          color: str | None = None, role: Role = Role.CONTENT,
+          gap: float = 0.0, min_opacity: float = 0.14) -> list[FilledCurve]:
+    """The outer product `u v^T` drawn as what rank 1 MEANS: every column
+    is the same vector `u`, scaled by `v[j]`.
 
-    This is the one mark every factorization reduces to. In
-    A = sum_k a_k b_k^T, term k is drawn on a result-shaped block with
-    column k of the left factor and row k of the right factor marked, so
-    the reader can see *which* column and row produced this summand.
+    So all `n` columns take one hue and their opacity tracks `|v[j]|` —
+    "one vector, n scalings", readable at a glance and different for every
+    summand of a decomposition. This is the mark every factorization
+    reduces to (Hiranabe P4; A = sum_k u_k v_k^T covers CR, LU, QR,
+    QLQ^T and USV^T alike).
+
+    Deliberately NOT "paint column j and row i of the result": those are
+    entries of the product, and highlighting them says the summand is that
+    subset, which is false — the summand is the whole rectangle.
+
+    `min_opacity` keeps a small-but-nonzero coefficient visible; a column
+    whose coefficient is exactly zero is omitted, because there the
+    summand genuinely contributes nothing.
     """
-    return [
-        FilledCurve(b.rect(), role=Role.MUTED, opacity=ground, outline=False),
-        FilledCurve(b.cols(j), role=role, color=col_color, opacity=1.0,
-                    outline=False),
-        FilledCurve(b.rows(i), role=role, color=row_color, opacity=1.0,
-                    outline=False),
-    ]
+    v = np.asarray(v, dtype=float).ravel()
+    if v.size != b.n:
+        raise ValueError(f"rank1: v has {v.size} entries, block has {b.n} "
+                         f"columns")
+    if np.asarray(u).ravel().size != b.m:
+        raise ValueError(f"rank1: u has {np.asarray(u).ravel().size} entries, "
+                         f"block has {b.m} rows")
+    peak = float(np.abs(v).max()) or 1.0
+    out: list[FilledCurve] = []
+    for j in range(b.n):
+        w = abs(float(v[j])) / peak
+        if w == 0.0:
+            continue
+        out.append(FilledCurve(
+            _inset(b.cols(j), gap), role=role, color=color,
+            opacity=min_opacity + (1.0 - min_opacity) * w, outline=False))
+    return out
 
 
 # --- value encoders ------------------------------------------------------

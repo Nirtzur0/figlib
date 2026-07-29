@@ -139,14 +139,29 @@ def test_diagonal_wraps_for_a_circulant_portrait():
 
 # --- rank-1 and the value encoders ---------------------------------------
 
-def test_rank1_paints_a_ground_crossed_by_one_column_and_one_row():
+def test_rank1_draws_every_column_with_opacity_tracking_the_coefficient():
     b = Block(3, 3)
-    items = rank1(b, 1, 2)
-    assert len(items) == 3
-    ground, col, row = items
-    assert ground.opacity == pytest.approx(0.12)
-    assert col.pts[:, 0].min() == 1.0 and col.pts[:, 0].max() == 2.0
-    assert row.pts[:, 1].min() == -3.0 and row.pts[:, 1].max() == -2.0
+    u = np.array([1.0, 2.0, 3.0])
+    v = np.array([1.0, 0.5, 0.0])
+    fills = rank1(b, u, v)
+    # the zero coefficient contributes nothing, so it is not drawn
+    assert len(fills) == 2
+    # full-height columns, in order
+    assert fills[0].pts[:, 1].min() == -3.0 and fills[0].pts[:, 1].max() == 0.0
+    assert fills[0].pts[:, 0].max() == 1.0
+    assert fills[1].pts[:, 0].max() == 2.0
+    # opacity is monotone in |v[j]|, and the peak column is fully opaque
+    assert fills[0].opacity == pytest.approx(1.0)
+    assert fills[1].opacity < fills[0].opacity
+    assert fills[1].opacity >= 0.14
+
+
+def test_rank1_rejects_factors_that_do_not_match_the_block():
+    b = Block(3, 3)
+    with pytest.raises(ValueError, match="v has 2 entries"):
+        rank1(b, np.ones(3), np.ones(2))
+    with pytest.raises(ValueError, match="u has 2 entries"):
+        rank1(b, np.ones(2), np.ones(3))
 
 
 def test_heat_covers_exactly_the_block_extent():
