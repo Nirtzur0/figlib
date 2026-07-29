@@ -149,6 +149,20 @@ def test_a_free_index_is_a_dangling_stub_of_the_stated_length():
     assert q[0] < p[0] and abs(q[1] - p[1]) < 1e-12
 
 
+def test_a_free_legs_label_sits_past_its_tip_not_on_the_line():
+    """Anchored ON the tip the index name is struck through by its own
+    stub — the first render of qk_circuit_tensor did exactly that."""
+    n = _chain()
+    stub = [e for e in edges(n) if e.key == "s"][0]
+    tip = np.array(stub.anchors[1])
+    lab = [it for it in stub.items() if isinstance(it, MathLabel)][0]
+    a = np.array(lab.anchor)
+    # leg angle 180: past the tip means further LEFT, and the text hangs
+    # off the anchor's right edge
+    assert a[0] < tip[0]
+    assert lab.ha == "right" and lab.va == "center"
+
+
 def test_every_index_is_labelled_exactly_once():
     labels = [it.latex for it in items(_chain()) if isinstance(it, MathLabel)]
     for idx in ("s", "d", "t"):

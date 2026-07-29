@@ -40,8 +40,8 @@ from typing import Sequence
 import numpy as np
 
 from .scene import Item
-from .schematic import (EDGE_KINDS, Edge, EdgeDecor, Node, assemble,
-                        circle_node, edge)
+from .schematic import (ARG_AXIS_TOL, EDGE_KINDS, Edge, EdgeDecor, Node,
+                        assemble, circle_node, edge)
 from .style import Role
 
 XY = tuple[float, float]
@@ -51,6 +51,11 @@ XY = tuple[float, float]
 # arrowhead on it would assert a mechanism the algebra does not have. That
 # is the distinction `schematic.EDGE_KINDS` asks a sixth kind to earn.
 EDGE_KINDS.setdefault("wire", EdgeDecor(head="none", chevrons=0))
+
+# Gap between a free leg's tip and its index label, in math units. Small
+# because `ha`/`va` already push the text off the line; this only keeps it
+# from touching the stroke end.
+LABEL_GAP = 0.06
 
 
 @dataclass(frozen=True)
@@ -267,8 +272,19 @@ def edges(net: Network) -> list[Edge]:
         else:
             (t0, l0), = legs
             length = l0.length if l0.length is not None else net.stub
-            out.append(edge(t0.port(l0), _tip(t0, l0, length),
-                            label_at=1.0, label_va="center", **kw))
+            tip = _tip(t0, l0, length)
+            th = np.radians(float(l0.angle))
+            cs, sn = float(np.cos(th)), float(np.sin(th))
+            # PAST the tip, with ha/va pointing away from the line — the
+            # `Junction` arg-label idiom. Anchored ON the tip the label is
+            # struck through by its own stub, whatever the halo does.
+            kw.update(
+                label_anchor=(tip[0] + LABEL_GAP * cs, tip[1] + LABEL_GAP * sn),
+                label_ha=("center" if abs(cs) < ARG_AXIS_TOL
+                          else ("left" if cs > 0 else "right")),
+                label_va=("center" if abs(sn) < ARG_AXIS_TOL
+                          else ("bottom" if sn > 0 else "top")))
+            out.append(edge(t0.port(l0), tip, **kw))
     return out
 
 

@@ -62,7 +62,8 @@ notation for mechanistic interpretability* (<https://arxiv.org/pdf/2402.01790>),
 *Named Tensor Notation* (<https://arxiv.org/pdf/2102.13196>). A tensor has
 legs, not a 2-D shape to draw to scale; forcing it into `Block` would
 corrupt the shape-is-geometry invariant. Separate spec, against
-`schematic.py`.
+`schematic.py`. **Since landed** — see
+`2026-07-29-tensor-network-design.md` and `src/figlib/tensor.py`.
 
 ## 0a. Revision: the merge is withdrawn
 

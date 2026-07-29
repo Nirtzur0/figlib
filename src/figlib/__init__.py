@@ -21,6 +21,8 @@ WRITING A FIGURE
     schematic   Class B: typed Node/Port/Edge + a ranked layout pass
     matrix      matrices as Blocks drawn at their own aspect ratio;
                 structure/value encoders, the expression row, shape gates
+    tensor      einsum as a Penrose diagram on schematic's geometry; the
+                spec is DERIVED from the drawing and gated by np.einsum
     surface3d   orthographic 3D -> depth-tagged 2D items; compose(), label3()
     sphere3d    sphere-specific producers for surface3d.compose()
     shading     chromatic light->shadow ramps in OKLCh

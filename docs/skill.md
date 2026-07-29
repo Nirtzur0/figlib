@@ -126,6 +126,7 @@ scratch. Each of these passed the full gate stack.
 | ranked node/edge schematic, main path as a spine | `schematic_transformer_block.py` |
 | matrix structure: four readings, a product as a sum of rank-1 | `matrix_four_views.py` |
 | matrix values: heatmap row + signed Hinton, low-rank truncation | `svd_low_rank.py` |
+| einsum / tensor network: legs, contractions, two diagrams one array | `qk_circuit_tensor.py` |
 
 ## 3D idioms (surface3d)
 

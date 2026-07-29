@@ -411,10 +411,43 @@ attention map, which is *not* low rank (rank 4 kept 62%), so its CLAIM
 was false; a Gaussian Gram matrix is (99.7%), and an assertion now pins
 that so the claim cannot rot.
 
-Still open, deliberately deferred: **einsum / tensor-network diagrams**
-(Penrose notation). A tensor has legs, not a 2-D shape to draw to scale,
-so it belongs on `schematic.py` as named nodes with contracted edges —
-forcing it into `Block` would corrupt the shape-is-geometry invariant.
-References: *An introduction to graphical tensor notation for mechanistic
-interpretability* (arXiv 2402.01790) and *Named Tensor Notation* (arXiv
-2102.13196).
+## Tensor networks (landed; the deferred item, closed)
+
+`tensor.py` — einsum as a Penrose diagram (arXiv 2402.01790, arXiv
+2102.13196). A node per tensor, a line per index, a joined line per
+contraction, a dangling line per free axis. Benchmark:
+`qk_circuit_tensor.py`.
+
+It rides on `schematic.py` rather than owning geometry: a tensor emits a
+`Node`, every line is an `Edge`, and `clearance_violations`,
+`crossing_count` and `assemble`'s draw order apply with no fork. One
+addition to `EDGE_KINDS` — `wire` — because all five existing kinds are
+directed and a contraction identifies two axes without asserting a flow.
+That is the bar that module sets for a sixth kind, and it is the right
+bar.
+
+**Applying the module test a second time, and it holding.** The claim the
+module makes checkable is `spec()`/`contract()`: the einsum string is
+DERIVED from the drawing, so a figure that prints its spec prints a value
+read off the picture. That buys the thing no careful drawing can — *two
+different diagrams are the same array*, which is the whole content of
+`qk_circuit_tensor` and is one `np.allclose` on two drawn networks.
+Dimensions are derived from the arrays and never stated, for the reason
+`Block` derives them: a stated dim makes the shape gate check the figure
+against itself.
+
+**The honest limit, worth writing down.** `check_index_dims` catches a
+mis-wired contraction only when the two axes differ in length. Swapping
+two axes of EQUAL length passes every structural gate; only
+`check_einsum` against an independently computed array catches it. So the
+value gate is not optional decoration here — it is the only thing
+standing between a drawn network and a plausible wrong one.
+
+**What the readbacks cost, and it was the same lesson twice.** Both cold
+readers called a left-margin `=` an annotation rather than a relational
+operator. An equation of figures has to be laid out as an equation —
+diagram, its spec, `=`, diagram, its spec, down the spine — and a
+relational operator parked in the margin stops being read as one. The
+second recurring note: a printed `rank = h` is a claim and
+`rank = matrix_rank(W_QK)` is evidence, and a reader can tell the
+difference. Print measurements, not restatements.
