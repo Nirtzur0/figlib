@@ -11,7 +11,7 @@ TOY = textwrap.dedent('''
     from figlib.style import Role
 
     CLAIM = "The unit parabola passes through the origin."
-    PARAMS = {"n": 50}
+    PARAMS = {"n": 51}  # odd count so the grid samples x = 0 exactly
 
     def compute(p):
         x = np.linspace(-1, 1, p["n"])
