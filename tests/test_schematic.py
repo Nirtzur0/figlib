@@ -810,3 +810,137 @@ class TestInductionHeadBenchmark:
         assert len(writes) == len(g["tokens"]) - 1
         assert sum(e.role is Role.ACCENT1 for e in writes) == 1
         assert all(e.role is Role.MUTED for e in writes if e.role is not Role.ACCENT1)
+
+
+# ===========================================================================
+# Honesty marks: the three elisions a schematic is allowed to make, drawn
+# instead of confessed in a docstring — a stack of ghost cards behind a node
+# that abbreviates many, a dashed `???` box for a mechanism nobody knows,
+# and a diamond-plus-ellipsis terminator for an edge that is being cut.
+# ===========================================================================
+
+
+class TestElisionStack:
+    def test_stack_emits_ghost_cards_behind_the_body(self):
+        n = sch.Node("mha", (0.0, 0.0), 4.0, 2.0, label="MHA", stack=2)
+        curves = [it for it in n.items() if isinstance(it, (Curve, FilledCurve))]
+
+        # 2 ghosts + 1 body outline, ghosts first (drawn behind)
+        assert len(curves) == 3
+        assert curves[0].role is Role.MUTED and curves[1].role is Role.MUTED
+        assert curves[2].role is Role.CONTENT
+
+        off = sch.STACK_OFFSET * min(4.0, 2.0)
+        assert np.allclose(curves[1].pts, curves[2].pts + [off, -off])
+        assert np.allclose(curves[0].pts, curves[2].pts + [2 * off, -2 * off])
+
+    def test_stack_offset_is_a_tenth_of_the_short_side(self):
+        assert sch.STACK_OFFSET == pytest.approx(0.10)
+
+    def test_no_stack_is_the_untouched_single_box(self):
+        assert len(sch.Node("n", (0.0, 0.0), 2.0, 1.0).items()) == 1
+
+    def test_ghosts_of_a_filled_node_are_paper_filled_too(self):
+        n = sch.Node("n", (0.0, 0.0), 2.0, 1.0, fill="#eeeeee", stack=1)
+        bodies = [it for it in n.items() if isinstance(it, (Curve, FilledCurve))]
+
+        assert len(bodies) == 2
+        ghost, body = bodies
+        assert isinstance(ghost, FilledCurve) and ghost.color == "#eeeeee"
+        assert ghost.role is Role.MUTED and ghost.outline
+        assert isinstance(body, FilledCurve)
+
+    def test_the_label_is_drawn_once_over_the_whole_stack(self):
+        labels = [it for it in sch.Node("n", (0.0, 0.0), 2.0, 1.0, label="x",
+                                        stack=3).items()
+                  if isinstance(it, MathLabel)]
+        assert len(labels) == 1
+
+
+class TestUnknownMechanismNode:
+    def test_unknown_node_is_dashed_with_a_mystery_label(self):
+        n = sch.unknown_node("mystery", (0.0, 0.0), 3.0, 1.5)
+        its = n.items()
+
+        labels = [it for it in its if isinstance(it, MathLabel)]
+        assert labels and "?" in labels[0].latex
+        curves = [it for it in its if isinstance(it, Curve)]
+        assert any(c.dash == "dashed" for c in curves)
+
+    def test_unknown_node_passes_the_rest_through(self):
+        n = sch.unknown_node("m", (1.0, 2.0), 3.0, 1.5, role=Role.MUTED, stack=1)
+        assert n.center == (1.0, 2.0) and n.role is Role.MUTED and n.stack == 1
+
+    def test_dash_on_an_open_node_lands_on_its_outline(self):
+        (outline,) = sch.Node("n", (0.0, 0.0), 2.0, 1.0, dash="dashed").items()
+        assert isinstance(outline, Curve) and outline.dash == "dashed"
+
+    def test_a_filled_dashed_node_splits_into_fill_plus_dashed_outline(self):
+        # FilledCurve has no dash channel, so the dash has to be its own
+        # stroke over an outline-free fill.
+        its = sch.Node("n", (0.0, 0.0), 2.0, 1.0, fill="#eeeeee",
+                       dash="dashed").items()
+        fill, outline = its[0], its[1]
+        assert isinstance(fill, FilledCurve) and not fill.outline
+        assert isinstance(outline, Curve) and outline.closed
+        assert outline.dash == "dashed"
+        assert np.allclose(outline.pts, fill.pts)
+
+
+class TestDeclaredTruncation:
+    def test_truncated_edge_has_no_head_but_a_diamond_and_an_ellipsis(self):
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True)
+        its = e.items()
+
+        main = its[0]
+        assert main.arrows == ()          # no head — the diamond replaces it
+        assert e.head_fractions() == ()
+
+        labels = [it for it in its if isinstance(it, MathLabel)]
+        assert any(r"\cdots" in lb.latex for lb in labels)
+
+        diamonds = [it for it in its if isinstance(it, Curve) and it.closed
+                    and len(it.pts) == 4]
+        assert len(diamonds) == 1
+        assert np.allclose(np.mean(diamonds[0].pts, axis=0), [10.0, 0.0],
+                           atol=1e-9)
+
+    def test_the_diamond_is_hollow_and_axis_aligned_to_the_terminal_tangent(self):
+        e = sch.edge((0.0, 0.0), (0.0, 4.0), "map", truncated=True)
+        (dia,) = [it for it in e.items() if isinstance(it, Curve) and it.closed]
+
+        h = sch.TRUNC_DIAMOND_HALF
+        # hollow: a stroked closed Curve, not a FilledCurve
+        assert not any(isinstance(it, FilledCurve) for it in e.items())
+        # tangent is +y here, so the vertices are the tip +/- h along x and y
+        assert sorted(map(tuple, np.round(dia.pts, 12))) == [
+            (-h, 4.0), (0.0, 4.0 - h), (0.0, 4.0 + h), (h, 4.0)]
+
+    def test_the_ellipsis_sits_past_the_tip_along_the_tangent(self):
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True)
+        (lb,) = [it for it in e.items() if isinstance(it, MathLabel)]
+        assert lb.role is Role.ANNOTATION
+        assert lb.anchor == pytest.approx((10.0 + 2.5 * sch.TRUNC_DIAMOND_HALF, 0.0))
+
+    def test_diamond_half_diagonal_is_in_math_units_like_the_bar(self):
+        # BAR_HALF's units: math, not px. A diamond an order of magnitude
+        # bigger than the inhibit bar would be a different mark entirely.
+        assert 0.2 * sch.BAR_HALF < sch.TRUNC_DIAMOND_HALF < 5.0 * sch.BAR_HALF
+
+    def test_a_truncated_inhibit_drops_its_terminal_bar_too(self):
+        e = sch.edge((0.0, 0.0), (3.0, 0.0), "inhibit", truncated=True)
+        closed = [it for it in e.items() if isinstance(it, Curve) and it.closed]
+        assert len(closed) == 1                      # only the diamond
+        # the 2-point bar is gone: main curve + diamond, nothing else stroked
+        assert [len(it.pts) for it in e.items() if isinstance(it, Curve)] == [2, 4]
+
+    def test_an_untruncated_edge_is_unchanged(self):
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map")
+        assert e.head_fractions() == (1.0,)
+        assert not any(isinstance(it, MathLabel) for it in e.items())
+        assert len(e.items()) == 1
+
+    def test_a_truncated_edge_keeps_its_own_label(self):
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True, label="f")
+        latexes = [it.latex for it in e.items() if isinstance(it, MathLabel)]
+        assert "f" in latexes and any(r"\cdots" in x for x in latexes)

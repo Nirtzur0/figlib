@@ -44,6 +44,13 @@ _SIDES = ("left", "right", "bottom", "top")
 # states every other coordinate. Override per edge.
 BAR_HALF = 0.12       # half-length of an `inhibit` edge's flat terminal bar
 CHEVRON_GAP = 0.15    # spacing between the stacked heads of a `copy` edge
+TRUNC_DIAMOND_HALF = 0.10   # half-diagonal of a truncated edge's terminator
+
+# The elision stack's per-card offset, as a FRACTION of min(w, h) rather
+# than a math length: a stack has to read as the same lie at every box
+# size, and a fixed offset would swallow a small node and vanish on a big
+# one. Dimensionless, so it is the one constant here not in math units.
+STACK_OFFSET = 0.10
 
 
 # --- geometry ---------------------------------------------------------------
@@ -189,6 +196,13 @@ class Node(_Box):
 
     `fill` is a paper colour (`THEME.background` / `THEME.paper[0]`), which
     is what lets rails and edges pass cleanly BEHIND a node.
+
+    Two of the fields are honesty marks — elisions drawn instead of
+    confessed in a docstring. `stack=n` puts n ghost cards behind the box:
+    "this node is many things abbreviated to one", which is what a box
+    labelled *Multi-Head Attention* already means and currently only says
+    in prose. `dash` makes the outline provisional; `unknown_node` is the
+    named case, a box whose mechanism nobody knows.
     """
 
     key: str
@@ -204,21 +218,42 @@ class Node(_Box):
     label_offset_px: XY = (0.0, 0.0)
     width_scale: float = 1.0
     n_arc: int = 6
+    stack: int = 0                     # ghost cards behind the box: "one of many"
+    dash: str | None = None            # provisional outline; see `unknown_node`
 
     @property
     def radius(self) -> float:
         r = self.corner if self.corner is not None else 0.22 * min(self.width, self.height)
         return float(min(max(r, 0.0), 0.5 * min(self.width, self.height)))
 
+    def _card(self, pts: np.ndarray, role: Role) -> list[Item]:
+        """One box body at `pts`: a wash, an outline, or a wash under one.
+
+        `FilledCurve` has no dash channel — dash is a stroke property and
+        the fill's outline is drawn by the fill — so a dashed filled box is
+        the one case that costs two items: an outline-free wash with its
+        own dashed stroke on top of it.
+        """
+        if self.fill is None:
+            return [Curve(pts, role=role, closed=True, dash=self.dash,
+                          width_scale=self.width_scale)]
+        out: list[Item] = [FilledCurve(pts, role=role, color=self.fill,
+                                       opacity=1.0, outline=self.dash is None)]
+        if self.dash is not None:
+            out.append(Curve(pts, role=role, closed=True, dash=self.dash,
+                             width_scale=self.width_scale))
+        return out
+
     def items(self) -> list[Item]:
         out: list[Item] = []
         pts = self.outline()
-        if self.fill is not None:
-            out.append(FilledCurve(pts, role=self.role, color=self.fill,
-                                   opacity=1.0, outline=True))
-        else:
-            out.append(Curve(pts, role=self.role, closed=True,
-                             width_scale=self.width_scale))
+        # Ghosts furthest-first, so the stack reads front-to-back and the
+        # body paints over all of them. MUTED because a ghost is the same
+        # object off-focus — grammar.md's off-focus channel exactly.
+        d0 = STACK_OFFSET * min(abs(self.width), abs(self.height))
+        for k in range(int(self.stack), 0, -1):
+            out += self._card(pts + [k * d0, -k * d0], Role.MUTED)
+        out += self._card(pts, self.role)
         if self.label:
             out.append(MathLabel(self.label, self.center,
                                  role=self.label_role or self.role,
@@ -226,6 +261,25 @@ class Node(_Box):
                                  size_pt=self.label_size_pt,
                                  offset_px=self.label_offset_px))
         return out
+
+
+# `?\,?\,?` and not `???`: three question marks set as math run together
+# into one blob, and the thin spaces are what make it read as a placeholder
+# for three unknown things rather than punctuation.
+UNKNOWN_LABEL = r"?\,?\,?"
+
+
+def unknown_node(key: str, center: XY, width: float, height: float, **kw) -> Node:
+    """A box whose mechanism is not known — dashed outline, `???` inside.
+
+    Uncertainty as a node rather than a caption hedge. It is two settings,
+    but naming it is the point: a figure that draws this has committed to
+    where its ignorance lives, and a reader can see the gap without reading
+    the caption.
+    """
+    kw.setdefault("label", UNKNOWN_LABEL)
+    kw.setdefault("dash", "dashed")
+    return Node(key, center, width, height, **kw)
 
 
 # --- regions: grouping as a ground, not a line ------------------------------
@@ -385,8 +439,13 @@ class Edge:
     dash: str | None = None            # override the kind's dash (identity channel)
     head_scale: float = 1.0
     casing: bool = False
+    # "this continues and I am choosing to stop": the terminal head is
+    # replaced by a hollow diamond and an ellipsis past the tip, so the cut
+    # is drawn rather than confessed in the caption.
+    truncated: bool = False
     bar_half: float = BAR_HALF
     chevron_gap: float = CHEVRON_GAP
+    trunc_half: float = TRUNC_DIAMOND_HALF
     label: str | None = None
     label_at: float = 0.5              # arc-length fraction, unless...
     label_anchor: XY | None = None     # ...an explicit point is given
@@ -417,22 +476,43 @@ class Edge:
         a fixed MATH distance apart, not a fixed fraction — otherwise a long
         edge's second head drifts to mid-curve and reads as a waypoint."""
         d = self.decor
+        if self.truncated:
+            return ()                  # the diamond IS the terminal mark
         if d.head not in ("filled", "hollow") or d.chevrons <= 0:
             return ()
         L = self.length or 1.0
         fr = [max(0.0, 1.0 - i * self.chevron_gap / L) for i in range(d.chevrons)]
         return tuple(sorted(fr))
 
-    def _terminal_bar(self) -> Curve:
+    def _terminal_tangent(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(tip, unit tangent, unit normal) at the far end of the route."""
         d = self.pts[-1] - self.pts[-2]
-        n = float(np.hypot(*d)) or 1.0
-        u = d / n
-        nrm = np.array([-u[1], u[0]])
-        tip = self.pts[-1]
+        u = d / (float(np.hypot(*d)) or 1.0)
+        return self.pts[-1], u, np.array([-u[1], u[0]])
+
+    def _terminal_bar(self) -> Curve:
+        tip, _, nrm = self._terminal_tangent()
         return Curve(np.vstack([tip + self.bar_half * nrm, tip - self.bar_half * nrm]),
                      role=self.role, color=self.color, opacity=self.opacity,
                      width_scale=self.width_scale * self.decor.width_scale,
                      dash="solid")
+
+    def _truncation_mark(self) -> list[Item]:
+        """Hollow diamond on the tip, `\\cdots` just past it.
+
+        Literal points, not derived ink: the diamond is stated in math
+        units like the `inhibit` bar, so it scales with the schematic and
+        no canvas-px resolver in render.py has to know it exists.
+        """
+        tip, u, nrm = self._terminal_tangent()
+        h = self.trunc_half
+        dia = np.vstack([tip + h * u, tip + h * nrm, tip - h * u, tip - h * nrm])
+        lab = tip + 2.5 * h * u
+        return [Curve(dia, role=self.role, color=self.color,
+                      opacity=self.opacity, closed=True, dash="solid",
+                      width_scale=self.width_scale * self.decor.width_scale),
+                MathLabel(r"\cdots", (float(lab[0]), float(lab[1])),
+                          role=Role.ANNOTATION, ha="center", va="center")]
 
     def items(self) -> list[Item]:
         d = self.decor
@@ -444,7 +524,9 @@ class Edge:
             arrow_style="hollow" if d.head == "hollow" else "filled",
             arrow_scale=self.head_scale * d.head_scale,
             casing=self.casing)]
-        if d.head == "bar":
+        if self.truncated:
+            out += self._truncation_mark()
+        elif d.head == "bar":
             out.append(self._terminal_bar())
         if self.label:
             anchor = self.label_anchor or self.point_at(self.label_at)
