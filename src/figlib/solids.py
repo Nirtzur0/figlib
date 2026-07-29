@@ -67,10 +67,15 @@ def face_item(poly3: np.ndarray, cam: Camera, ramp: Ramp, *,
                     grad = Gradient.from_ramp(ramp, tuple(axis2[0]),
                                               tuple(axis2[1]),
                                               t_range=(lo, hi), n=stops)
+    fill = ramp(t)
+    # edge=None seals each face with a hairline of its own base color:
+    # adjacent facets otherwise leave antialiasing seams (paper-colored
+    # pinstripes down a faceted cylinder)
     return (float(depth.mean()), FilledCurve(
         pts2, role=Role.CONTENT, opacity=1.0, outline=False,
-        color=ramp(t), gradient=grad, grain=grain,
-        edge_color=edge, edge_width=edge_width if edge else None))
+        color=fill, gradient=grad, grain=grain,
+        edge_color=edge if edge is not None else fill,
+        edge_width=edge_width))
 
 
 def extrude_items(poly2: np.ndarray, z0: float, z1: float, cam: Camera,

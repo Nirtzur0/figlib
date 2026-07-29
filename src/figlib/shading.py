@@ -54,10 +54,12 @@ def quantize(ramp: Ramp, bands: int,
              span: tuple[float, float] = (0.0, 1.0)) -> Ramp:
     """Posterize a ramp into exactly `bands` steps sampled at band centers.
 
-    `span` sets the t-interval the bands divide. The default is the whole
-    ramp; a caller that knows its geometry's actual tonal sweep (e.g. a
-    cylinder's visible facets) passes that sweep, so all `bands` steps
-    land inside what is actually drawn instead of mostly off-screen.
+    `span` sets the t-interval the bands DIVIDE; the colors always sample
+    the ramp's full [0, 1]. A caller that knows its geometry's actual
+    tonal sweep (e.g. a cylinder's visible facets, t in [0.3, 0.5])
+    passes that sweep — the posterized look wants the whole ramp
+    stretched across what is drawn, not three near-identical steps cut
+    from its middle.
     """
     if bands < 2:
         raise ValueError(f"bands must be >= 2, got {bands}")
@@ -67,6 +69,6 @@ def quantize(ramp: Ramp, bands: int,
     def q(t: float) -> str:
         u = min(max((float(t) - s0) / w, 0.0), 1.0)
         k = min(int(u * bands), bands - 1)
-        return ramp(s0 + (k + 0.5) / bands * w)
+        return ramp((k + 0.5) / bands)
 
     return q

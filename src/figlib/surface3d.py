@@ -257,19 +257,30 @@ def as_floor(group: list[tuple[float, object]]) -> list[tuple[float, object]]:
 
 def drop_shadow(pts3: np.ndarray, cam: Camera, z0: float = 0.0,
                 opacity: float = 0.16, color: str | None = None,
-                role: Role = Role.MUTED) -> list[tuple[float, FilledCurve]]:
+                role: Role = Role.MUTED,
+                depth_bias: float | None = None) -> list[tuple[float, FilledCurve]]:
     """Contact shadow: the convex hull of the geometry's vertical footprint
     on the plane z=z0, projected and depth-tagged strictly behind every
     point of the geometry — the cue that places a floating object ON its
-    floor (compose() after as_floor ground, before the object)."""
+    floor (compose() after as_floor ground, before the object).
+
+    depth_bias=None keeps that strictly-behind tag. A positive value tags
+    the shadow at its own mean depth + bias instead — for a shadow cast
+    onto another object's TOP FACE (same plane, so same mean depth): the
+    bias paints it over its carrier face, while the caster above remains
+    strictly nearer.
+    """
     from scipy.spatial import ConvexHull
 
     pts3 = np.asarray(pts3, dtype=float)
     foot = pts3[ConvexHull(pts3[:, :2]).vertices, :2]
     shadow3 = np.column_stack([foot, np.full(len(foot), z0)])
     pts2, depth = project(shadow3, cam)
-    # min footprint depth <= min object depth (same xy, z above the floor
-    # for elev > 0), so this tag paints before every object quad
-    tag = float(depth.min()) - 1e-3 * (float(np.ptp(depth)) + 1e-9)
+    if depth_bias is not None:
+        tag = float(depth.mean()) + depth_bias
+    else:
+        # min footprint depth <= min object depth (same xy, z above the
+        # floor for elev > 0), so this tag paints before every object quad
+        tag = float(depth.min()) - 1e-3 * (float(np.ptp(depth)) + 1e-9)
     return [(tag, FilledCurve(pts2, role=role, opacity=opacity,
                               outline=False, color=color))]

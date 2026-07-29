@@ -39,6 +39,22 @@ class TestDropShadow:
         assert isinstance(ordered[0], FilledCurve)
         assert ordered[0] is shadow[0][1], "shadow must paint first"
 
+    def test_shadow_with_depth_bias_paints_over_its_carrier_plane(self):
+        # a floating object's shadow cast onto another object's top face
+        # must paint AFTER that face (else the face hides it) but BEFORE
+        # the floating object itself
+        cam = Camera()
+        top = np.array([[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]],
+                       dtype=float)
+        floater = np.array([[x, y, z] for x in (-0.4, 0.4)
+                            for y in (-0.4, 0.4) for z in (2.0, 2.8)])
+        from figlib.solids import face_item
+        carrier = face_item(top, cam, lambda t: "#888888")
+        shadow = drop_shadow(floater, cam, z0=1.0, depth_bias=0.05)
+        d_face = carrier[0]
+        d_shadow = shadow[0][0]
+        assert d_face < d_shadow, "shadow must paint after its carrier face"
+
     def test_shadow_is_a_soft_flat_patch(self):
         X, Y, Z = _paraboloid()
         pts3 = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])

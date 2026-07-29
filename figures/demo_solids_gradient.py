@@ -48,13 +48,17 @@ def _box_verts(center, size):
 
 def compute(p):
     cyl = p["cyl"]
+    cx, cy, cz = cyl["center"]
+    th = np.linspace(0.0, 2 * np.pi, p["facets"], endpoint=False)
+    rim = np.column_stack([cx + cyl["radius"] * np.cos(th),
+                           cy + cyl["radius"] * np.sin(th),
+                           np.full(p["facets"], cz - cyl["height"] / 2)])
     return {
         "params": p,
-        "cyl_verts": _box_verts(cyl["center"],
-                                (2 * cyl["radius"], 2 * cyl["radius"],
-                                 cyl["height"])),
+        "cyl_rim": rim,
         "lo_verts": _box_verts(**p["box_lo"]),
         "hi_verts": _box_verts(**p["box_hi"]),
+        "lo_top": p["box_lo"]["center"][2] + p["box_lo"]["size"][2] / 2,
     }
 
 
@@ -80,8 +84,11 @@ def build(g):
     lo, hi, cyl = p["box_lo"], p["box_hi"], p["cyl"]
     items = compose(
         drop_shadow(g["lo_verts"], cam, color=ramp_brick(0.0), opacity=0.22),
-        drop_shadow(g["hi_verts"], cam, color=ramp_indigo(0.0), opacity=0.14),
-        drop_shadow(g["cyl_verts"], cam, color=ramp_ochre(0.0), opacity=0.22),
+        # the floating box shades the box below it, not the floor: cast
+        # onto the lower box's top plane, biased to paint over that face
+        drop_shadow(g["hi_verts"], cam, z0=g["lo_top"],
+                    color=ramp_brick(0.0), opacity=0.14, depth_bias=0.05),
+        drop_shadow(g["cyl_rim"], cam, color=ramp_ochre(0.0), opacity=0.22),
         box_items(lo["center"], lo["size"], cam, ramp_brick,
                   side_grad_amp=amp, cap_grad_amp=amp, grain=p["grain"]),
         box_items(hi["center"], hi["size"], cam, ramp_indigo,
