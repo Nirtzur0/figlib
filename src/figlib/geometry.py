@@ -104,3 +104,30 @@ def reverse_sde_paths(m0: Mixture1D, x_T: np.ndarray, T: float, n_steps: int,
 def sample_mixture(m: Mixture1D, n: int, rng: np.random.Generator) -> np.ndarray:
     comp = rng.choice(len(m.weights), size=n, p=m.weights)
     return m.means[comp] + m.sigmas[comp] * rng.standard_normal(n)
+
+
+def cassinian_curves(k: float, n_samples: int = 400) -> list[np.ndarray]:
+    """Cassinian ovals |z-1||z+1| = k^2 (foci at +-1), as closed polylines.
+
+    Polar form about the origin: r^2 = cos(2t) +- sqrt(k^4 - sin^2(2t)).
+    k < 1: two loops around the foci; k = 1: lemniscate; k > 1: one loop.
+    """
+    if k < 1.0:
+        alpha = 0.5 * np.arcsin(k * k)
+        t = np.linspace(-alpha + 1e-9, alpha - 1e-9, n_samples // 2)
+        disc = np.sqrt(np.maximum(k**4 - np.sin(2 * t) ** 2, 0.0))
+        r_out = np.sqrt(np.cos(2 * t) + disc)
+        r_in = np.sqrt(np.maximum(np.cos(2 * t) - disc, 0.0))
+        loop = np.concatenate([
+            r_out[:, None] * np.column_stack([np.cos(t), np.sin(t)]),
+            (r_in[::-1])[:, None] * np.column_stack([np.cos(t[::-1]), np.sin(t[::-1])]),
+        ])
+        return [loop, -loop]
+    if abs(k - 1.0) < 1e-12:
+        t = np.linspace(-np.pi / 4, np.pi / 4, n_samples)
+        r = np.sqrt(np.maximum(2 * np.cos(2 * t), 0.0))
+        loop = r[:, None] * np.column_stack([np.cos(t), np.sin(t)])
+        return [loop, -loop]
+    t = np.linspace(0, 2 * np.pi, n_samples)
+    r = np.sqrt(np.cos(2 * t) + np.sqrt(k**4 - np.sin(2 * t) ** 2))
+    return [r[:, None] * np.column_stack([np.cos(t), np.sin(t)])]
