@@ -43,14 +43,50 @@ def _add_stroke(el: ET.Element, style: Style, role: Role, width_scale: float = 1
         el.set("stroke-dasharray", ink.dash)
 
 
-def _arrowhead(tip: tuple[float, float], direction: tuple[float, float], style: Style) -> list[tuple[float, float]]:
+def _arrowhead(tip: tuple[float, float], direction: tuple[float, float], style: Style,
+               scale: float = 1.0) -> list[tuple[float, float]]:
     dx, dy = direction
     n = math.hypot(dx, dy) or 1.0
     ux, uy = dx / n, dy / n
     px, py = -uy, ux
-    L, W = style.arrowhead_len, style.arrowhead_halfwidth
+    L, W = style.arrowhead_len * scale, style.arrowhead_halfwidth * scale
     bx, by = tip[0] - L * ux, tip[1] - L * uy
     return [tip, (bx + W * px, by + W * py), (bx - W * px, by - W * py)]
+
+
+def _emit_head(root: ET.Element, head: list[tuple[float, float]], color: str,
+               style: Style, hollow: bool, stroke_width: float) -> None:
+    attrs = {"class": "arrowhead",
+             "points": " ".join(f"{_fmt(x)},{_fmt(y)}" for x, y in head)}
+    if hollow:
+        transparent = getattr(style, "transparent", False)
+        attrs.update({"fill": "none" if transparent else style.background,
+                      "stroke": color, "stroke-width": _fmt(stroke_width),
+                      "stroke-linejoin": "round"})
+    else:
+        attrs["fill"] = color
+    ET.SubElement(root, "polygon", attrs)
+
+
+def _at_fraction(pts: np.ndarray, t: float) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Point and tangent at arc-length fraction t of a canvas polyline."""
+    seg = np.diff(pts, axis=0)
+    lens = np.hypot(seg[:, 0], seg[:, 1])
+    total = float(lens.sum())
+    if total == 0.0:
+        return (float(pts[0, 0]), float(pts[0, 1])), (1.0, 0.0)
+    target = min(max(t, 0.0), 1.0) * total
+    cum = np.cumsum(lens)
+    i = min(int(np.searchsorted(cum, target)), len(lens) - 1)
+    prev = float(cum[i - 1]) if i > 0 else 0.0
+    f = (target - prev) / (lens[i] or 1.0)
+    p = pts[i] + f * seg[i]
+    # tangent from the surrounding segment; skip zero-length segments
+    d = seg[i]
+    if lens[i] == 0.0:
+        j = next((k for k in range(len(lens)) if lens[k] > 0), None)
+        d = seg[j] if j is not None else np.array([1.0, 0.0])
+    return (float(p[0]), float(p[1])), (float(d[0]), float(d[1]))
 
 
 def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 900) -> tuple[ET.Element, Transform]:
@@ -83,12 +119,28 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
 
     for it in scene.items:
         if isinstance(it, Curve):
-            el = ET.SubElement(root, "path", {"d": _path_d(t.to_canvas_arr(it.pts), it.closed), "fill": "none"})
+            cpts = t.to_canvas_arr(it.pts)
+            el = ET.SubElement(root, "path", {"d": _path_d(cpts, it.closed), "fill": "none"})
             _add_stroke(el, style, it.role, it.width_scale)
             if it.color is not None:
                 el.set("stroke", it.color)
+            if it.dash is not None:
+                d = style.dash(it.dash)
+                if d is None:
+                    el.attrib.pop("stroke-dasharray", None)
+                else:
+                    el.set("stroke-dasharray", d)
             if it.opacity < 1.0:
                 el.set("stroke-opacity", _fmt(it.opacity))
+            if it.arrows:
+                mpts = np.vstack([cpts, cpts[:1]]) if it.closed else cpts
+                color = it.color or style.ink(it.role).color
+                for frac in it.arrows:
+                    tip, direction = _at_fraction(mpts, frac)
+                    head = _arrowhead(tip, direction, style, it.arrow_scale)
+                    _emit_head(root, head, color, style,
+                               hollow=(it.arrow_style == "hollow"),
+                               stroke_width=style.ink(it.role).width * it.width_scale)
 
         elif isinstance(it, FilledCurve):
             ink = style.ink(it.role)
@@ -117,10 +169,9 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
                 "fill": "none"})
             _add_stroke(el, style, it.role, it.width_scale)
             head = _arrowhead(tip, d, style)
-            ET.SubElement(root, "polygon", {
-                "class": "arrowhead",
-                "points": " ".join(f"{_fmt(x)},{_fmt(y)}" for x, y in head),
-                "fill": style.ink(it.role).color})
+            _emit_head(root, head, style.ink(it.role).color, style,
+                       hollow=not it.filled,
+                       stroke_width=style.ink(it.role).width * it.width_scale)
 
         elif isinstance(it, Point):
             cx, cy = t.to_canvas(it.xy)

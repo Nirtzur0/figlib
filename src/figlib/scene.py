@@ -23,6 +23,14 @@ class Curve:
     width_scale: float = 1.0
     opacity: float = 1.0
     color: str | None = None       # semantic override (e.g. hue encodes a coordinate)
+    # dash independent of role: "dashed"/"dotted" (style-resolved) or a raw
+    # SVG dasharray — dash pattern can carry identity across panels
+    dash: str | None = None
+    # tangent-oriented direction markers at arc-length fractions of the
+    # curve (Needham: filled head = contour/motion, hollow = streamline)
+    arrows: tuple[float, ...] = ()
+    arrow_style: str = "filled"    # filled | hollow
+    arrow_scale: float = 1.0
 
 
 @dataclass
@@ -42,6 +50,9 @@ class Vector:
     tip: XY
     role: Role = Role.CONTENT
     width_scale: float = 1.0
+    # False -> ghost copy: paper-filled head and shaft outline (the
+    # white-original / black-image convention of amplitwist figures)
+    filled: bool = True
 
 
 @dataclass

@@ -37,9 +37,18 @@ class Style:
     arrowhead_len: float = 10.0
     arrowhead_halfwidth: float = 3.6
     background: str = "white"
+    # named dash levels: dash as identity, orthogonal to role
+    dash_patterns: dict[str, str] = field(default_factory=lambda: {
+        "solid": "", "dashed": "6 4.5", "dotted": "0.1 4"})
 
     def ink(self, role: Role) -> Ink:
         return self.inks[role]
+
+    def dash(self, spec: str) -> str | None:
+        """Resolve a semantic dash name or pass a raw dasharray through."""
+        if spec in self.dash_patterns:
+            return self.dash_patterns[spec] or None
+        return spec
 
 
 DEFAULT_STYLE = Style(
