@@ -8,6 +8,7 @@ both land in the same two-mode data distribution from the same noise.
 
 import numpy as np
 
+from figlib.format import WIDE
 from figlib.geometry import (Mixture1D, mixture_pdf, mixture_score, ou_marginal,
                              pf_ode_paths, reverse_sde_paths, sample_mixture)
 from figlib.scene import Curve, FilledCurve, MathLabel, Point, Scene, Vector
@@ -20,6 +21,8 @@ CLAIM = (
     "two-mode data distribution, because both integrate the same score field "
     "and share the same marginals at every intermediate time."
 )
+
+FORMAT = WIDE
 
 PARAMS = {
     "T": 2.5,

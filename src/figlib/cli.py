@@ -18,7 +18,8 @@ from .readback import prompt_for
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="figcheck")
     ap.add_argument("program", help="path to a figure program .py")
-    ap.add_argument("--width", type=float, default=1100)
+    ap.add_argument("--width", type=float, default=None,
+                    help="override the figure's declared FORMAT width (CSS px)")
     ap.add_argument("--readback-prompt", action="store_true",
                     help="print the cold-reader prompt for the rendered PNG")
     ap.add_argument("--transparent", action="store_true",

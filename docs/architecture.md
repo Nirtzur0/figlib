@@ -58,6 +58,24 @@ Rules: hue = correspondence, lightness = order, accent = the
 distinguished object, never decoration (see grammar.md). A theme changes
 *which* colors carry those channels, never *what* the channels mean.
 
+## Sizing (format.py)
+
+**The invariant: canvas units are display CSS pixels.** A figure declares
+its slot on the page (`FORMAT = MARGIN | COLUMN | WIDE` — 340 / 680 /
+1000 px), and every absolute quantity — label pt, stroke px, arrowheads,
+dot radii — is thereby at final rendered size. 11 pt is 11 pt in every
+figure; nothing is designed at one size and read at another.
+
+Consequences enforced by the mechanical gate:
+- no label below 8.5 pt (`tiny-label`);
+- no label taller than 18% of the canvas (`label-scale`);
+- total label area under 22% of the canvas (`annotation-load`).
+
+When a gate fires, the fix is a larger Format or less annotation —
+**never smaller type.** Single-panel figures default to COLUMN;
+two-panel comparisons and dense 3D take WIDE; a wrapped side figure
+takes MARGIN and correspondingly less annotation.
+
 ## The three figure classes, one pipeline
 
 - **Computed geometry (Class A)** — compute() produces the curves;
@@ -85,7 +103,10 @@ design step — the prompts that will form the skill's core. In order:
 
 1. **CLAIM.** One sentence, the claim the figure argues. If you cannot
    write it, there is no figure yet.
-2. **Encoding choice.** Which geometry makes the claim *visible*?
+2. **Encoding choice, at a size.** Which geometry makes the claim
+   *visible*, and in which page slot (Format)? The annotation load and
+   the slot are chosen together — a MARGIN figure carries one label, a
+   WIDE comparison carries the theorem.
    (Trajectories? level sets? a mesh deforming? a surface? an endpoint
    ensemble?) Ask: what would Needham draw; what does the claim's HARD
    half need (grammar.md).

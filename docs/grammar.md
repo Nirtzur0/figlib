@@ -71,6 +71,11 @@ State, in order:
   (truncated spires) get a small printed admission; an unlabeled
   truncation reads as a finite maximum.
 - **One claim per figure.** Stages of an argument get [a]/[b] panels.
+- **Design at display size.** Canvas px = page CSS px; declare the slot
+  (FORMAT) and never scale type to fit. If annotation doesn't fit, the
+  slot is too small or the ink budget too large — shrinking labels below
+  8.5 pt trades legibility for density and the mechanical gate rejects
+  it. (The volcano's 8 pt truncation admission was the first catch.)
 - **Trim to content.** Located whitespace (an empty quadrant) is a
   design smell; axes end just past the content they support.
 

@@ -7,6 +7,7 @@ carried by color correspondence, not just by the theta/n-theta labels.
 
 import numpy as np
 
+from figlib.format import WIDE
 from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
 
@@ -16,6 +17,8 @@ CLAIM = (
     "polar-grid sector opens out into a fan three times as wide while every "
     "grid intersection stays a right angle."
 )
+
+FORMAT = WIDE
 
 PARAMS = {
     "n": 3,

@@ -20,8 +20,17 @@ _DESCENT_FRAC = 0.2
 
 @dataclass(frozen=True)
 class Diagnostic:
-    kind: str    # 'label-collision' | 'clipped' | 'numerical'
+    kind: str    # 'label-collision' | 'clipped' | 'tiny-label' | 'label-scale' | 'annotation-load' | 'numerical'
     detail: str
+
+
+# Legibility floor: below this the label is unreadable at display size.
+MIN_LABEL_PT = 8.5
+# A single label taller than this fraction of the canvas dominates it.
+MAX_LABEL_HEIGHT_FRAC = 0.18
+# Total label area beyond this fraction means the slot is too small for
+# the annotation load — use a larger Format or trim, never shrink type.
+MAX_ANNOTATION_AREA_FRAC = 0.22
 
 
 def _label_boxes(scene: Scene, style: Style, t: Transform) -> list[tuple[str, tuple[float, float, float, float]]]:
@@ -68,6 +77,28 @@ def mechanical(scene: Scene, style: Style, width_px: float = 900) -> list[Diagno
     for latex, (x0, y0, x1, y1) in boxes:
         if x0 < 0 or y0 < 0 or x1 > t.canvas_w or y1 > t.canvas_h:
             diags.append(Diagnostic("clipped", f"'{latex}' extends outside the canvas"))
+
+    # Legibility at display size (canvas px == display CSS px).
+    for it in scene.items:
+        if isinstance(it, MathLabel):
+            pt = it.size_pt or style.label_size_pt
+            if pt < MIN_LABEL_PT:
+                diags.append(Diagnostic(
+                    "tiny-label", f"'{it.latex}' at {pt}pt < {MIN_LABEL_PT}pt floor"))
+    canvas_area = t.canvas_w * t.canvas_h
+    label_area = 0.0
+    for latex, (x0, y0, x1, y1) in boxes:
+        label_area += (x1 - x0) * (y1 - y0)
+        if (y1 - y0) > MAX_LABEL_HEIGHT_FRAC * t.canvas_h:
+            diags.append(Diagnostic(
+                "label-scale",
+                f"'{latex}' is {(y1 - y0) / t.canvas_h:.0%} of canvas height — "
+                f"use a larger Format, not smaller type"))
+    if canvas_area and label_area > MAX_ANNOTATION_AREA_FRAC * canvas_area:
+        diags.append(Diagnostic(
+            "annotation-load",
+            f"labels cover {label_area / canvas_area:.0%} of the canvas "
+            f"(> {MAX_ANNOTATION_AREA_FRAC:.0%}) — larger Format or less annotation"))
     return diags
 
 

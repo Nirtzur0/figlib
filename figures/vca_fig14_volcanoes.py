@@ -12,9 +12,11 @@ import numpy as np
 from figlib.scene import MathLabel, Scene, Vector
 from figlib.style import Role
 from figlib.surface3d import Camera, compose, polyline_items, project, surface_items
+from figlib.format import WIDE
 from figlib.theme import RISO
 
 THEME = RISO
+FORMAT = WIDE
 
 CLAIM = (
     "The graph of 1/(1+x^2) is the tranquil real-axis slice of the modular "
@@ -127,7 +129,7 @@ def build(g):
     (tr2,), _ = project(np.array([[0.0, 1.0, g["cap"] + 0.42]]), cam)
     s.add(MathLabel(r"(\text{spires truncated; poles are infinite})",
                     (tr2[0], tr2[1]), ha="left", va="center", offset_px=(60, -4),
-                    size_pt=8, role=Role.ANNOTATION))
+                    size_pt=9, role=Role.ANNOTATION))
 
     # plane label
     (c2,), _ = project(np.array([[h + m - 0.25, -h + 0.28, 0.0]]), cam)

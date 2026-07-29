@@ -54,7 +54,7 @@ def load_program(path: str | Path) -> ModuleType:
 
 
 def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
-        style: Style = DEFAULT_STYLE, width_px: float = 900,
+        style: Style = DEFAULT_STYLE, width_px: float | None = None,
         transparent: bool = False) -> Report:
     if not isinstance(program, ModuleType):
         program_path = Path(program)
@@ -65,6 +65,9 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
         default_out = Path(mod.__file__ or ".").parent / "out"
     out = Path(out_dir) if out_dir else default_out
 
+    if width_px is None:
+        from .format import COLUMN
+        width_px = getattr(mod, "FORMAT", COLUMN).display_width_px
     style = getattr(mod, "THEME", None) or style
     if transparent:
         from .theme import Theme, transparent_variant

@@ -8,6 +8,7 @@ accented and its image is the circle through the origin.
 
 import numpy as np
 
+from figlib.format import WIDE
 from figlib.geometry import cassinian_curves
 from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
@@ -17,6 +18,8 @@ CLAIM = (
     "preimages under w = z^2 of the concentric circles |w-1| = k^2, with the "
     "k=1 lemniscate mapping to the circle through the origin."
 )
+
+FORMAT = WIDE
 
 PARAMS = {
     "ks": [0.7, 0.85, 1.0, 1.2, 1.45],
