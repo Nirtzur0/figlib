@@ -28,15 +28,26 @@
 - [ ] Implement: cross in `_unit_shape` handled as a special case in `markers` (two segment Curves at ±45°, scaled by an area-equalizing factor ≈ visual weight match; use length factor 1.0 and document); stems = per-sample `Curve([[x, base], [x, y_stop]])` + `markers`; impulses = `Vector((x, base), (x, base + w))`.
 - [ ] `make test` green. Commit `plots: stems, impulses, cross marker — the discrete-sequence types`.
 
-### Task 2: `figlib/matrix.py` — CellGrid + producers
+### Task 2: `figlib/matrix.py` — SUPERSEDED, execute the matrix-layer plan instead
 
-**Files:** Create `src/figlib/matrix.py`; Test `tests/test_matrixgrid.py`.
+**This task does not run.** `CellGrid` and the matrix-layer spec's `Block`
+were independently designed as the same object in the same new module.
+They are merged into one type, `Block`, and the whole of
+`src/figlib/matrix.py` is now built by
+**`docs/superpowers/plans/2026-07-29-matrix-layer.md` Tasks 1–5**, which
+absorb `map_into`, `edge`, `extent`, `center`, `grid_lines`, `brackets`,
+`cell_fills`, and `diag_cells` (as the mask recipe `diagonal(b, offset,
+wrap)`).
 
-**Produces:** `CellGrid(origin, shape, cell)` with `.rect(i,j)`, `.center(i,j)`, `.map_into(i,j,pts,src=((0,1),(0,1)))`, `.extent`, `.edge(side, pad=0)`; producers `grid_lines(g, ...)`, `brackets(g, ...)`, `cell_fills(g, values, ramp=..., vmin, vmax)`, `diag_cells(shape, offset, wrap=False)`.
+One behavioural change to note before writing Task 6: `cell` is a scalar
+cell **width** and cell height is `cell * aspect`, with `aspect`
+defaulting to `1.0` (square). `dft_matrix_basis.py` wants tall cells, so
+it passes `aspect` explicitly — square cells are the default because they
+are what make a drawn rectangle's aspect ratio equal its shape, which the
+matrix-layer conformability gates rest on.
 
-- [ ] Failing tests: row 0 is TOP row (center(0,0)[1] > center(1,0)[1]); rect corners CCW and cell-sized; map_into maps (0,0)→bottom-left / (1,1)→top-right of cell interior with v up; custom src frame; extent covers m×n cells; edge segments; grid_lines count (inner+outer); brackets = 2 Curves each 4 points; cell_fills one FilledCurve per cell, ramp applied over (vmin, vmax) with correct normalization, values shape must equal g.shape; diag_cells offset ±k lengths, wrap=True yields exactly n cells for square shape (circulant).
-- [ ] Run tests — fail. Implement (~120 lines). `make test` green.
-- [ ] Commit `matrix: CellGrid addressable geometry + grid/bracket/fill/diag producers`.
+- [ ] Confirm the matrix-layer plan Tasks 1–5 are merged before starting
+      Task 6; there is nothing to implement or commit here.
 
 ### Task 3: `plots.colorbar`
 
@@ -64,7 +75,9 @@ Panel [a]: z-plane, CONSTRUCTION unit circle, `markers(..., "cross")` poles / ho
 
 ### Task 6: exemplar `figures/dft_matrix_basis.py`
 
-8×8 `CellGrid`, each column j a mini stem plot of Re e^{2πijk/8} via `map_into` (stems computed in local (u,v), mapped); `brackets`; right of the matrix: x[n] stems and |X[k]| stems (the decomposition); small unit circle with the 8 roots of unity, `theme.phase(2πj/8)` hue binding column headers to roots. Assertions: F·F*/8 = I; drawn |X[k]| equals |fft(x)| to 1e-12; column waveform samples equal Re F[:, j].
+8×8 `Block` (see Task 2 — `CellGrid` is merged into it), each column j a mini stem plot of Re e^{2πijk/8} via `map_into` (stems computed in local (u,v), mapped); `brackets`; right of the matrix: x[n] stems and |X[k]| stems (the decomposition); small unit circle with the 8 roots of unity, `theme.phase(2πj/8)` hue binding column headers to roots. Assertions: F·F*/8 = I; drawn |X[k]| equals |fft(x)| to 1e-12; column waveform samples equal Re F[:, j].
+
+This is the one figure that wants non-square cells: pass `aspect` explicitly (a waveform needs vertical room), and do **not** call `check_square_cells` on it — a basis gallery is not arguing about dimensions. It is also the end-to-end exercise of the merged surface (`map_into` + `brackets` + `cell_fills` + `aspect != 1.0`), so run it after the matrix-layer plan is fully merged.
 
 - [ ] Write figure; `make check` to green; commit with baselines.
 

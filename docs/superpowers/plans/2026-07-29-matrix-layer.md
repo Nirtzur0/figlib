@@ -10,6 +10,15 @@
 
 Spec: `docs/superpowers/specs/2026-07-29-matrix-layer-design.md`.
 
+**This plan also builds all of `src/figlib/matrix.py` for the signals &
+linear-algebra plan.** That spec independently designed `CellGrid` — the
+same frozen, draws-nothing, top-left-origin cell geometry in the same new
+module. The two are merged into one type, `Block`;
+`docs/superpowers/plans/2026-07-29-signals-linalg.md` Task 2 is superseded
+and defers here. The merge shows up in three places below: `Block` gains
+`aspect`, `map_into`, and `edge` (Task 1); Task 2 gains `grid_lines`,
+`brackets`, and `diagonal(..., wrap=)`; Task 3 gains `cell_fills`.
+
 ## Global Constraints
 
 - **Never name a color, font, or stroke width in `matrix.py` or in a figure.** Encoders take `role: Role` and `color: str | None`; the *figure program* supplies `THEME.categorical(i)` / `THEME.ramp(t)`. `matrix.py` imports nothing from `theme.py`.
@@ -50,7 +59,7 @@ Spec: `docs/superpowers/specs/2026-07-29-matrix-layer-design.md`.
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `Block(m, n, origin=(0.0, 0.0), cell=1.0, values=None, name="")`, frozen. Properties `width: float`, `height: float`, `bbox: tuple[float,float,float,float]` as `(x0, x1, y0, y1)`. Methods `rect() -> np.ndarray` (4,2); `span(j0, j1, i0, i1) -> np.ndarray` (4,2); `cols(j0, j1=None) -> np.ndarray`; `rows(i0, i1=None) -> np.ndarray`; `cell_rect(i, j) -> np.ndarray`; `cell_center(i, j) -> tuple[float,float]`; `sub(rows: slice, cols: slice) -> Block`; `at(origin, cell=None) -> Block`. Module constant `XY = tuple[float, float]`.
+- Produces: `Block(m, n, origin=(0.0, 0.0), cell=1.0, aspect=1.0, values=None, name="")`, frozen. `cell` is the cell **width**; cell height is `cell * aspect`. Properties `cell_w`, `cell_h`, `width`, `height` (all `float`), `extent: tuple[float,float,float,float]` as `(x0, x1, y0, y1)`. Methods `rect() -> np.ndarray` (4,2); `span(j0, j1, i0, i1) -> np.ndarray` (4,2); `cols(j0, j1=None)`; `rows(i0, i1=None)`; `cell_rect(i, j)`; `center(i, j) -> tuple[float,float]`; `sub(rows: slice, cols: slice) -> Block`; `at(origin, cell=None) -> Block`; `map_into(i, j, pts, *, src=((0,1),(0,1))) -> np.ndarray`; `edge(side, *, pad=0.0) -> np.ndarray` (2,2). Module constant `XY = tuple[float, float]`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -65,23 +74,64 @@ import pytest
 from figlib.matrix import Block
 
 
-def test_block_bbox_puts_row_zero_at_the_top():
+def test_block_extent_puts_row_zero_at_the_top():
     b = Block(2, 3)                      # origin (0,0) is the TOP-LEFT
     assert b.width == 3.0
     assert b.height == 2.0
-    assert b.bbox == (0.0, 3.0, -2.0, 0.0)
+    assert b.extent == (0.0, 3.0, -2.0, 0.0)
     # row 0 sits above row 1 in math coords (+y up)
-    assert b.cell_center(0, 0)[1] > b.cell_center(1, 0)[1]
+    assert b.center(0, 0)[1] > b.center(1, 0)[1]
 
 
-def test_block_cell_center_and_rect():
+def test_block_center_and_rect():
     b = Block(2, 3, origin=(10.0, 5.0), cell=2.0)
-    assert b.cell_center(0, 0) == (11.0, 4.0)
-    assert b.cell_center(1, 2) == (15.0, 2.0)
+    assert b.center(0, 0) == (11.0, 4.0)
+    assert b.center(1, 2) == (15.0, 2.0)
     r = b.rect()
     assert r.shape == (4, 2)
     assert r[:, 0].min() == 10.0 and r[:, 0].max() == 16.0
     assert r[:, 1].min() == 1.0 and r[:, 1].max() == 5.0
+
+
+def test_block_aspect_stretches_cells_vertically_only():
+    b = Block(2, 3, cell=1.0, aspect=2.5)
+    assert b.cell_w == 1.0 and b.cell_h == 2.5
+    assert b.width == 3.0 and b.height == 5.0
+    assert b.extent == (0.0, 3.0, -5.0, 0.0)
+    # square is the default, because shape-as-aspect-ratio depends on it
+    assert Block(2, 3).aspect == 1.0
+
+
+def test_map_into_lands_a_local_frame_in_one_cell_with_v_up():
+    b = Block(2, 2, cell=2.0)
+    # the unit square maps to cell (0,1): x in [2,4], y in [-2,0]
+    corners = np.array([[0.0, 0.0], [1.0, 1.0]])
+    out = b.map_into(0, 1, corners)
+    assert tuple(out[0]) == (2.0, -2.0)      # (u,v)=(0,0) -> bottom-left
+    assert tuple(out[1]) == (4.0, 0.0)       # (u,v)=(1,1) -> top-right
+
+
+def test_map_into_honors_a_custom_source_frame():
+    b = Block(1, 1, cell=1.0)
+    # a waveform in u in [0,8], v in [-1,1] fills the cell
+    pts = np.array([[0.0, -1.0], [8.0, 1.0], [4.0, 0.0]])
+    out = b.map_into(0, 0, pts, src=((0.0, 8.0), (-1.0, 1.0)))
+    assert tuple(out[0]) == (0.0, -1.0)
+    assert tuple(out[1]) == (1.0, 0.0)
+    assert tuple(out[2]) == (0.5, -0.5)      # the midpoint stays central
+
+
+def test_edge_returns_the_side_segment_with_padding():
+    b = Block(2, 3)
+    left = b.edge("left")
+    assert left.shape == (2, 2)
+    assert left[0, 0] == 0.0 and left[1, 0] == 0.0
+    assert sorted(left[:, 1]) == [-2.0, 0.0]
+    # pad pushes the segment OUTWARD from the block
+    assert b.edge("left", pad=0.5)[0, 0] == -0.5
+    assert b.edge("right", pad=0.5)[0, 0] == 3.5
+    assert b.edge("top", pad=0.5)[0, 1] == 0.5
+    assert b.edge("bottom", pad=0.5)[0, 1] == -2.5
 
 
 def test_block_cols_and_rows_span_the_full_cross_dimension():
@@ -105,7 +155,7 @@ def test_block_sub_composes_and_carries_values():
     assert s.origin == (2.0, -1.0)          # shifted right 2, down 1
     assert np.array_equal(s.values, V[1:3, 2:4])
     # the sub-block's own cell (0,0) is the parent's cell (1,2)
-    assert s.cell_center(0, 0) == b.cell_center(1, 2)
+    assert s.center(0, 0) == b.center(1, 2)
 
 
 def test_block_rejects_a_values_shape_mismatch():
@@ -149,6 +199,11 @@ program supplies `THEME.categorical(i)` / `THEME.ramp(t)`.
 Coordinates: math coords, +y UP, and `Block.origin` is the **top-left**
 corner — so row 0 is at the top, matching `RasterField`'s row-0-at-`y1`
 rule and ordinary matrix index convention.
+
+`Block` is also the signals & linear-algebra spec's `CellGrid`: the two
+were designed independently as the same addressable cell geometry, and
+merged rather than left to drift. That is where `map_into`, `edge`,
+`grid_lines`, `brackets`, and `cell_fills` come from.
 """
 
 from __future__ import annotations
@@ -162,16 +217,27 @@ XY = tuple[float, float]
 
 @dataclass(frozen=True)
 class Block:
-    """A matrix drawn to shape: `m*cell` tall by `n*cell` wide.
+    """A matrix drawn to shape: `n*cell` wide, `m*cell*aspect` tall.
+
+    Draws nothing — it answers coordinate questions and the author
+    composes items against it.
+
+    `aspect` is cell height / cell width. It defaults to 1.0, and that
+    default is load-bearing: square cells are what make the drawn
+    rectangle's aspect ratio EQUAL the shape (m, n), which is what the
+    conformability gates rest on. A basis gallery whose cells hold mini
+    waveforms opts out by passing `aspect` explicitly — on the record,
+    and `check_square_cells` is how a figure that must not opt out says so.
 
     `values` is optional. Supplying it unlocks the value encoders (`heat`,
-    `hinton`, `entries`) and the `check_expr` gate; a purely structural
-    figure leaves it None.
+    `cell_fills`, `hinton`, `entries`) and the `check_expr` gate; a purely
+    structural figure leaves it None.
     """
     m: int
     n: int
     origin: XY = (0.0, 0.0)            # TOP-left, math coords
-    cell: float = 1.0
+    cell: float = 1.0                  # cell WIDTH
+    aspect: float = 1.0                # cell height / width
     values: np.ndarray | None = None
     name: str = ""
 
@@ -179,8 +245,10 @@ class Block:
         if self.m <= 0 or self.n <= 0:
             raise ValueError(
                 f"Block shape must be positive, got ({self.m}, {self.n})")
-        if self.cell <= 0:
-            raise ValueError(f"Block cell must be positive, got {self.cell}")
+        if self.cell <= 0 or self.aspect <= 0:
+            raise ValueError(
+                f"Block cell and aspect must be positive, got "
+                f"{self.cell} and {self.aspect}")
         if self.values is not None:
             v = np.asarray(self.values)
             if v.shape != (self.m, self.n):
@@ -191,24 +259,32 @@ class Block:
     # --- derived geometry (no scene items) -------------------------------
 
     @property
+    def cell_w(self) -> float:
+        return self.cell
+
+    @property
+    def cell_h(self) -> float:
+        return self.cell * self.aspect
+
+    @property
     def width(self) -> float:
-        return self.n * self.cell
+        return self.n * self.cell_w
 
     @property
     def height(self) -> float:
-        return self.m * self.cell
+        return self.m * self.cell_h
 
     @property
-    def bbox(self) -> tuple[float, float, float, float]:
-        """(x0, x1, y0, y1) — the RasterField extent convention."""
+    def extent(self) -> tuple[float, float, float, float]:
+        """(x0, x1, y0, y1) — named for the RasterField parameter it feeds."""
         ox, oy = self.origin
         return (ox, ox + self.width, oy - self.height, oy)
 
     def span(self, j0: int, j1: int, i0: int, i1: int) -> np.ndarray:
         """Closed rect (4, 2) over column range [j0, j1) x row range [i0, i1)."""
         ox, oy = self.origin
-        x0, x1 = ox + j0 * self.cell, ox + j1 * self.cell
-        y1, y0 = oy - i0 * self.cell, oy - i1 * self.cell
+        x0, x1 = ox + j0 * self.cell_w, ox + j1 * self.cell_w
+        y1, y0 = oy - i0 * self.cell_h, oy - i1 * self.cell_h
         return np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=float)
 
     def rect(self) -> np.ndarray:
@@ -223,9 +299,9 @@ class Block:
     def cell_rect(self, i: int, j: int) -> np.ndarray:
         return self.span(j, j + 1, i, i + 1)
 
-    def cell_center(self, i: int, j: int) -> XY:
+    def center(self, i: int, j: int) -> XY:
         ox, oy = self.origin
-        return (ox + (j + 0.5) * self.cell, oy - (i + 0.5) * self.cell)
+        return (ox + (j + 0.5) * self.cell_w, oy - (i + 0.5) * self.cell_h)
 
     def sub(self, rows: slice, cols: slice) -> "Block":
         """A sub-block: still a Block, so encoders and gates compose on it."""
@@ -234,8 +310,8 @@ class Block:
         ox, oy = self.origin
         return Block(
             len(ri), len(ci),
-            origin=(ox + ci.start * self.cell, oy - ri.start * self.cell),
-            cell=self.cell,
+            origin=(ox + ci.start * self.cell_w, oy - ri.start * self.cell_h),
+            cell=self.cell, aspect=self.aspect,
             values=None if self.values is None else self.values[rows, cols],
             name=f"{self.name}[{ri.start}:{ri.stop},{ci.start}:{ci.stop}]"
                  if self.name else "")
@@ -245,6 +321,45 @@ class Block:
         return replace(self, origin=(float(origin[0]), float(origin[1])),
                        cell=self.cell if cell is None else float(cell))
 
+    def map_into(self, i: int, j: int, pts: np.ndarray, *,
+                 src: tuple[tuple[float, float], tuple[float, float]]
+                 = ((0.0, 1.0), (0.0, 1.0))) -> np.ndarray:
+        """Affine-map points from a local (u, v) frame into cell (i, j),
+        with v UP within the cell.
+
+        The inset bridge: compute a mini stem plot, waveform, or anything
+        else in whatever local coordinates it is natural in, map it, emit
+        it. This is what makes "basis gallery" a recipe rather than a
+        primitive — the cell is just a viewport.
+        """
+        (u0, u1), (v0, v1) = src
+        du = (u1 - u0) or 1.0
+        dv = (v1 - v0) or 1.0
+        p = np.atleast_2d(np.asarray(pts, dtype=float))
+        r = self.span(j, j + 1, i, i + 1)   # [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]
+        x0, y0 = float(r[0, 0]), float(r[0, 1])
+        return np.column_stack([
+            x0 + (p[:, 0] - u0) / du * self.cell_w,
+            y0 + (p[:, 1] - v0) / dv * self.cell_h,
+        ])
+
+    def edge(self, side: str, *, pad: float = 0.0) -> np.ndarray:
+        """The (2, 2) segment along one side, `pad` pushed OUTWARD.
+
+        The anchor line for brackets, index labels, dimension braces.
+        """
+        x0, x1, y0, y1 = self.extent
+        if side == "left":
+            return np.array([[x0 - pad, y1], [x0 - pad, y0]], dtype=float)
+        if side == "right":
+            return np.array([[x1 + pad, y1], [x1 + pad, y0]], dtype=float)
+        if side == "top":
+            return np.array([[x0, y1 + pad], [x1, y1 + pad]], dtype=float)
+        if side == "bottom":
+            return np.array([[x0, y0 - pad], [x1, y0 - pad]], dtype=float)
+        raise ValueError(
+            f"edge side must be left|right|top|bottom, got {side!r}")
+
 
 def _nm(b: Block) -> str:
     return b.name or f"{b.m}x{b.n}"
@@ -253,7 +368,7 @@ def _nm(b: Block) -> str:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `make test`
-Expected: PASS — 6 tests in `tests/test_matrix.py`, no regressions elsewhere.
+Expected: PASS — 10 tests in `tests/test_matrix.py`, no regressions elsewhere.
 
 - [ ] **Step 5: Commit**
 
@@ -263,7 +378,12 @@ git commit -m "matrix: Block — a matrix drawn at its own aspect ratio
 
 Frozen dataclass carrying (m, n) and optional values; all geometry
 derived, none emitted, so render and gates cannot drift. Origin is
-top-left so row 0 is at the top, matching RasterField."
+top-left so row 0 is at the top, matching RasterField.
+
+Merges the signals spec's CellGrid: same object, same module, designed
+twice. map_into and edge come from there. Its cell (width, height)
+becomes scalar cell + explicit aspect, because square cells are what
+make the drawn aspect ratio equal the shape."
 ```
 
 ---
@@ -283,14 +403,18 @@ top-left so row 0 is at the top, matching RasterField."
   - `mask(b, M, *, color=None, role=Role.CONTENT, opacity=1.0) -> list[FilledCurve]` where `M` is a `(m, n)` bool array or a callable `(i, j) -> bool`
   - `tri(b, side="lower", k=0) -> np.ndarray`
   - `banded(b, lo, hi) -> np.ndarray`
+  - `diagonal(b, offset=0, *, wrap=False) -> np.ndarray`
   - `causal(b) -> np.ndarray`
+  - `grid_lines(b, *, role=Role.FRAME, inner=True, outer=True) -> list[Curve]`
+  - `brackets(b, *, pad=None, tick=None, role=Role.ANNOTATION) -> list[Curve]`
 
 - [ ] **Step 1: Write the failing tests**
 
 Append to `tests/test_matrix.py`:
 
 ```python
-from figlib.matrix import bands, banded, causal, lattice, mask, outline, tri
+from figlib.matrix import (bands, banded, brackets, causal, diagonal,
+                           grid_lines, lattice, mask, outline, tri)
 from figlib.scene import FilledCurve, Point
 from figlib.style import Role
 
@@ -329,7 +453,7 @@ def test_lattice_emits_one_dot_per_entry_at_cell_centers():
     dots = lattice(b)
     assert len(dots) == 6
     assert all(isinstance(d, Point) for d in dots)
-    assert dots[0].xy == b.cell_center(0, 0)
+    assert dots[0].xy == b.center(0, 0)
 
 
 def test_mask_merges_consecutive_true_cells_in_a_row():
@@ -355,6 +479,38 @@ def test_tri_banded_and_causal_are_masks_over_the_index_grid():
     assert banded(b, 0, 0).sum() == 3          # the diagonal
     assert banded(b, -1, 1).sum() == 7         # tridiagonal
     assert np.array_equal(causal(b), tri(b, "lower"))
+
+
+def test_diagonal_wraps_for_a_circulant_portrait():
+    b = Block(4, 4)
+    assert diagonal(b, 0).sum() == 4
+    assert diagonal(b, 1).sum() == 3           # the superdiagonal is short
+    # wrapped, EVERY diagonal of a square block has exactly n cells —
+    # which is what makes a circulant portrait a one-liner
+    assert diagonal(b, 1, wrap=True).sum() == 4
+    assert diagonal(b, -3, wrap=True).sum() == 4
+    # np.argwhere is the index-pair form, for placing markers per cell
+    assert np.argwhere(diagonal(b, 0)).shape == (4, 2)
+
+
+def test_grid_lines_counts_inner_rules_and_the_outer_frame():
+    b = Block(2, 3)
+    inner = grid_lines(b, outer=False)
+    assert len(inner) == 1 + 2                 # 1 horizontal, 2 vertical
+    both = grid_lines(b)
+    assert len(both) == len(inner) + 1         # + one closed outer rect
+    assert both[-1].closed is True
+
+
+def test_brackets_emit_two_three_segment_glyphs_flanking_the_block():
+    b = Block(2, 3)
+    left, right = brackets(b, pad=0.1, tick=0.2)
+    assert left.pts.shape == (4, 2) and right.pts.shape == (4, 2)
+    # the left bracket's spine sits left of the block, ticks point right
+    assert left.pts[:, 0].min() == pytest.approx(-0.1)
+    assert left.pts[:, 0].max() == pytest.approx(0.1)
+    assert right.pts[:, 0].max() == pytest.approx(3.1)
+    assert right.pts[:, 0].min() == pytest.approx(2.9)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -429,7 +585,7 @@ def lattice(b: Block, *, color: str | None = None,
             role: Role = Role.CONTENT,
             radius_scale: float = 1.0) -> list[Point]:
     """The matrix as `mn` scalars: a dot at every cell center."""
-    return [Point(b.cell_center(i, j), role=role, color=color,
+    return [Point(b.center(i, j), role=role, color=color,
                   radius_scale=radius_scale)
             for i in range(b.m) for j in range(b.n)]
 
@@ -485,25 +641,75 @@ def banded(b: Block, lo: int, hi: int) -> np.ndarray:
     return (j - i >= lo) & (j - i <= hi)
 
 
+def diagonal(b: Block, offset: int = 0, *, wrap: bool = False) -> np.ndarray:
+    """The k-th diagonal. `wrap` closes it modulo n — the circulant case,
+    where every diagonal has exactly n cells and a Toeplitz portrait
+    becomes a one-liner. `np.argwhere` on the result gives index pairs,
+    for a call site placing one marker per cell.
+    """
+    i, j = np.indices((b.m, b.n))
+    if not wrap:
+        return (j - i) == offset
+    return ((j - i) % b.n) == (offset % b.n)
+
+
 def causal(b: Block) -> np.ndarray:
     """The attention mask: position i may attend to j <= i."""
     return tri(b, "lower", 0)
+
+
+# --- cell furniture (from the signals spec) ------------------------------
+
+def grid_lines(b: Block, *, role: Role = Role.FRAME, inner: bool = True,
+               outer: bool = True) -> list[Curve]:
+    """Ruled cells: `m-1` horizontal and `n-1` vertical inner rules, plus
+    the closed outer rect. The furniture that makes a small matrix read as
+    a table of entries rather than a filled region."""
+    x0, x1, y0, y1 = b.extent
+    out: list[Curve] = []
+    if inner:
+        for i in range(1, b.m):
+            y = y1 - i * b.cell_h
+            out.append(Curve(np.array([[x0, y], [x1, y]]), role=role))
+        for j in range(1, b.n):
+            x = x0 + j * b.cell_w
+            out.append(Curve(np.array([[x, y0], [x, y1]]), role=role))
+    if outer:
+        out.append(Curve(b.rect(), role=role, closed=True))
+    return out
+
+
+def brackets(b: Block, *, pad: float | None = None,
+             tick: float | None = None,
+             role: Role = Role.ANNOTATION) -> list[Curve]:
+    """The two square-bracket glyphs, as 3-segment Curves flanking the
+    block. `pad` is the gap from the block edge, `tick` the length of the
+    horizontal serifs; both default to a fraction of the cell width."""
+    p = 0.25 * b.cell_w if pad is None else pad
+    t = 0.30 * b.cell_w if tick is None else tick
+    x0, x1, y0, y1 = b.extent
+    left = np.array([[x0 - p + t, y1], [x0 - p, y1], [x0 - p, y0],
+                     [x0 - p + t, y0]], dtype=float)
+    right = np.array([[x1 + p - t, y1], [x1 + p, y1], [x1 + p, y0],
+                      [x1 + p - t, y0]], dtype=float)
+    return [Curve(left, role=role), Curve(right, role=role)]
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `make test`
-Expected: PASS — 13 tests in `tests/test_matrix.py`.
+Expected: PASS — 20 tests in `tests/test_matrix.py`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/figlib/matrix.py tests/test_matrix.py
-git commit -m "matrix: structure encoders — outline, bands, lattice, mask
+git commit -m "matrix: structure encoders — outline, bands, lattice, mask, furniture
 
 The four readings of one rectangle (Hiranabe's grammar). mask merges
 runs within a row so a triangular silhouette reads as a staircase, not
-a grid of squares; tri/banded/causal are recipes on it, not primitives."
+a grid of squares; tri/banded/diagonal/causal are recipes on it, not
+primitives. grid_lines and brackets come from the merged signals spec."
 ```
 
 ---
@@ -519,6 +725,7 @@ a grid of squares; tri/banded/causal are recipes on it, not primitives."
 - Produces:
   - `rank1(b, j, i, *, col_color=None, row_color=None, role=Role.CONTENT, ground=0.12) -> list`
   - `heat(b, *, ramp=None, vmin=None, vmax=None, opacity=1.0, interp=False) -> RasterField`
+  - `cell_fills(b, *, ramp, vmin=None, vmax=None, role=Role.CONTENT, opacity=1.0) -> list[FilledCurve]`
   - `hinton(b, *, vmax=None, pos_role=Role.ACCENT1, neg_role=Role.ACCENT2, max_frac=0.92) -> list[FilledCurve]`
   - `entries(b, *, fmt="{:.2g}", role=Role.ANNOTATION, size_pt=None) -> list[MathLabel]`
 
@@ -527,7 +734,7 @@ a grid of squares; tri/banded/causal are recipes on it, not primitives."
 Append to `tests/test_matrix.py`:
 
 ```python
-from figlib.matrix import entries, heat, hinton, rank1
+from figlib.matrix import cell_fills, entries, heat, hinton, rank1
 from figlib.scene import MathLabel
 
 
@@ -541,17 +748,36 @@ def test_rank1_paints_a_ground_crossed_by_one_column_and_one_row():
     assert row.pts[:, 1].min() == -3.0 and row.pts[:, 1].max() == -2.0
 
 
-def test_heat_covers_exactly_the_block_bbox():
+def test_heat_covers_exactly_the_block_extent():
     V = np.arange(6, dtype=float).reshape(2, 3)
     b = Block(2, 3, values=V)
     r = heat(b)
-    assert r.extent == b.bbox
+    assert r.extent == b.extent
     assert np.array_equal(r.values, V)
 
 
 def test_heat_needs_values():
     with pytest.raises(ValueError, match="carries no values"):
         heat(Block(2, 3))
+
+
+def test_cell_fills_is_the_vector_path_one_fill_per_cell():
+    V = np.array([[0.0, 1.0], [2.0, 3.0]])
+    b = Block(2, 2, values=V)
+    fills = cell_fills(b, ramp=lambda t: f"#{int(255 * t):02x}0000")
+    assert len(fills) == 4
+    # normalized over the data range: min -> t=0, max -> t=1
+    assert fills[0].color == "#000000"
+    assert fills[-1].color == "#ff0000"
+    assert np.array_equal(fills[0].pts, b.cell_rect(0, 0))
+
+
+def test_cell_fills_honors_an_explicit_range():
+    b = Block(1, 2, values=np.array([[0.0, 1.0]]))
+    seen = []
+    cell_fills(b, ramp=lambda t: seen.append(t) or "#000000",
+               vmin=-1.0, vmax=1.0)
+    assert seen == [0.5, 1.0]
 
 
 def test_hinton_encodes_magnitude_as_area_not_as_side():
@@ -576,7 +802,7 @@ def test_entries_labels_every_cell_at_its_center():
     labs = entries(b)
     assert len(labs) == 4
     assert all(isinstance(el, MathLabel) for el in labs)
-    assert labs[0].anchor == b.cell_center(0, 0)
+    assert labs[0].anchor == b.center(0, 0)
     assert labs[0].latex == "1"
 ```
 
@@ -630,8 +856,29 @@ def heat(b: Block, *, ramp=None, vmin: float | None = None,
     array is cell (i, j) of the Block — a structure overlay (`mask`,
     `bands`) lands on the entries it describes.
     """
-    return RasterField(_values(b), extent=b.bbox, ramp=ramp, vmin=vmin,
+    return RasterField(_values(b), extent=b.extent, ramp=ramp, vmin=vmin,
                        vmax=vmax, opacity=opacity, interp=interp)
+
+
+def cell_fills(b: Block, *, ramp, vmin: float | None = None,
+               vmax: float | None = None, role: Role = Role.CONTENT,
+               opacity: float = 1.0) -> list[FilledCurve]:
+    """The same encoding as `heat`, one FilledCurve per cell instead of one
+    raster.
+
+    Two paths, and the author chooses: a 32x32 attention map wants `heat`
+    (no vector substitute at that density), an 8x8 wants `cell_fills`,
+    whose cells stay vector — individually addressable, crisp at any zoom,
+    and visible to the color gate. Emission is row-major.
+    """
+    V = _values(b)
+    lo = float(V.min()) if vmin is None else float(vmin)
+    hi = float(V.max()) if vmax is None else float(vmax)
+    d = (hi - lo) or 1.0
+    return [FilledCurve(b.cell_rect(i, j), role=role,
+                        color=ramp(float((V[i, j] - lo) / d)),
+                        opacity=opacity, outline=False)
+            for i in range(b.m) for j in range(b.n)]
 
 
 def hinton(b: Block, *, vmax: float | None = None,
@@ -658,7 +905,7 @@ def hinton(b: Block, *, vmax: float | None = None,
             if v == 0.0:
                 continue
             side = b.cell * max_frac * math.sqrt(min(abs(v) / peak, 1.0))
-            cx, cy = b.cell_center(i, j)
+            cx, cy = b.center(i, j)
             h = side / 2.0
             out.append(FilledCurve(
                 np.array([[cx - h, cy - h], [cx + h, cy - h],
@@ -675,7 +922,7 @@ def entries(b: Block, *, fmt: str = "{:.2g}",
     gate's annotation-load check is what tells you when you have overrun it.
     """
     V = _values(b)
-    return [MathLabel(fmt.format(float(V[i, j])), b.cell_center(i, j),
+    return [MathLabel(fmt.format(float(V[i, j])), b.center(i, j),
                       role=role, ha="center", va="center", size_pt=size_pt)
             for i in range(b.m) for j in range(b.n)]
 ```
@@ -683,7 +930,7 @@ def entries(b: Block, *, fmt: str = "{:.2g}",
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `make test`
-Expected: PASS — 19 tests in `tests/test_matrix.py`.
+Expected: PASS — 28 tests in `tests/test_matrix.py`.
 
 - [ ] **Step 5: Commit**
 
@@ -692,9 +939,10 @@ git add src/figlib/matrix.py tests/test_matrix.py
 git commit -m "matrix: rank1 mark and the value encoders
 
 rank1 is the mark every factorization reduces to. heat wires RasterField
-to Block bbox (row 0 at top in both, so overlays land on the right
-cells); hinton carries sign, which no monotone ramp can, with area — not
-side — proportional to |v|."
+to Block extent (row 0 at top in both, so overlays land on the right
+cells); cell_fills is the same encoding at vector density for small
+matrices; hinton carries sign, which no monotone ramp can, with area —
+not side — proportional to |v|."
 ```
 
 ---
@@ -728,11 +976,11 @@ def test_expr_places_blocks_left_to_right_on_a_common_center():
                        cell=1.0, gap=0.5, op_gap=1.0)
     assert [p.name for p in placed] == ["A", "B", "C"]
     # left to right, no overlap
-    assert placed[0].bbox[1] <= placed[1].bbox[0]
-    assert placed[1].bbox[1] <= placed[2].bbox[0]
+    assert placed[0].extent[1] <= placed[1].extent[0]
+    assert placed[1].extent[1] <= placed[2].extent[0]
     # vertically centered on y = 0 regardless of m
     for p in placed:
-        assert (p.bbox[2] + p.bbox[3]) / 2 == pytest.approx(0.0)
+        assert (p.extent[2] + p.extent[3]) / 2 == pytest.approx(0.0)
 
 
 def test_expr_forces_one_shared_cell_so_inner_dimensions_line_up():
@@ -750,7 +998,7 @@ def test_expr_emits_one_label_per_operator():
     assert [o.latex for o in ops] == ["=", "+"]
     assert all(isinstance(o, MathLabel) for o in ops)
     # each operator sits between the blocks it joins
-    assert placed[0].bbox[1] <= ops[0].anchor[0] <= placed[1].bbox[0]
+    assert placed[0].extent[1] <= ops[0].anchor[0] <= placed[1].extent[0]
 
 
 def test_expr_preserves_values_through_placement():
@@ -762,8 +1010,8 @@ def test_expr_preserves_values_through_placement():
 def test_bounds_covers_every_block_with_padding():
     _, placed = expr([Block(2, 2), "=", Block(2, 2)], cell=1.0)
     xlim, ylim = bounds(placed, pad=0.5)
-    assert xlim[0] == pytest.approx(placed[0].bbox[0] - 0.5)
-    assert xlim[1] == pytest.approx(placed[-1].bbox[1] + 0.5)
+    assert xlim[0] == pytest.approx(placed[0].extent[0] - 0.5)
+    assert xlim[1] == pytest.approx(placed[-1].extent[1] + 0.5)
     assert ylim == pytest.approx((-1.5, 1.5))
 ```
 
@@ -834,15 +1082,15 @@ def bounds(blocks: Sequence[Block], *, pad: float = 0.0
     """(xlim, ylim) covering every block, padded — for Scene lims."""
     if not blocks:
         raise ValueError("bounds() needs at least one block")
-    xs = [v for b in blocks for v in (b.bbox[0], b.bbox[1])]
-    ys = [v for b in blocks for v in (b.bbox[2], b.bbox[3])]
+    xs = [v for b in blocks for v in (b.extent[0], b.extent[1])]
+    ys = [v for b in blocks for v in (b.extent[2], b.extent[3])]
     return ((min(xs) - pad, max(xs) + pad), (min(ys) - pad, max(ys) + pad))
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `make test`
-Expected: PASS — 24 tests in `tests/test_matrix.py`.
+Expected: PASS — 33 tests in `tests/test_matrix.py`.
 
 - [ ] **Step 5: Commit**
 
@@ -869,18 +1117,22 @@ geometrically, which Panels (independent transforms) could not do."
 - Produces:
   - `check_conformable(checks, terms) -> None`
   - `check_cell_uniform(checks, blocks) -> None`
+  - `check_square_cells(checks, blocks) -> None`
   - `check_no_overlap(checks, blocks) -> None`
   - `check_expr(checks, terms, *, rtol=1e-9, atol=0.0) -> None`
   - `check_hinton_area(checks, b, squares, *, rtol=1e-6) -> None`
 
-**Deviation from the spec, applied in this task.** The spec's §4 named
-`check_shape_faithful` (drawn aspect ratio equals `m/n`). With `width =
-n*cell` and `height = m*cell` that is true by construction, so it would be
-gate theater — precisely what `docs/skill.md` forbids. It is replaced by
-two checks that *can* fail: `check_cell_uniform` (a hand-placed block
-next to `expr`-placed ones renders at a different scale, so the picture
-lies about relative size) and `check_no_overlap` (a `gap`/`op_gap` too
-small silently collides two matrices). Step 6 of this task amends the spec.
+**Why there is no `check_shape_faithful`.** The spec originally named one
+(drawn aspect ratio equals `m/n`). With `width = n*cell` and
+`height = m*cell*aspect`, that is true by construction whenever
+`aspect == 1`, so asserting it would be gate theater — precisely what
+`docs/skill.md` forbids. It is replaced by three checks that *can* fail:
+`check_cell_uniform` (a hand-placed block next to `expr`-placed ones
+renders at a different scale, so the picture lies about relative size),
+`check_square_cells` (a figure arguing about dimensions drawn with the
+gallery's tall cells), and `check_no_overlap` (a `gap`/`op_gap` too small
+silently collides two matrices). The spec is already amended to match — no
+edit is needed here.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -889,7 +1141,8 @@ Append to `tests/test_matrix.py`:
 ```python
 from figlib.gates import Checks
 from figlib.matrix import (check_cell_uniform, check_conformable, check_expr,
-                           check_hinton_area, check_no_overlap)
+                           check_hinton_area, check_no_overlap,
+                           check_square_cells)
 
 
 def _fails(fn) -> list[str]:
@@ -928,6 +1181,20 @@ def test_check_cell_uniform_catches_a_block_placed_at_another_scale():
     rogue = placed + [Block(2, 2, origin=(20.0, 0.0), cell=0.4, name="R")]
     msgs = _fails(lambda c: check_cell_uniform(c, rogue))
     assert any("cell" in m and "R" in m for m in msgs)
+
+
+def test_check_square_cells_catches_a_shape_claim_drawn_with_tall_cells():
+    assert _fails(lambda c: check_square_cells(c, [Block(2, 3)])) == []
+    msgs = _fails(lambda c:
+                  check_square_cells(c, [Block(2, 3, aspect=2.5, name="G")]))
+    assert any("aspect" in m and "G" in m for m in msgs)
+
+
+def test_check_cell_uniform_also_compares_aspect():
+    blocks = [Block(2, 2), Block(2, 2, origin=(5.0, 0.0), aspect=2.0,
+                                 name="tall")]
+    msgs = _fails(lambda c: check_cell_uniform(c, blocks))
+    assert any("aspect" in m for m in msgs)
 
 
 def test_check_no_overlap_catches_a_gap_too_small_for_the_operator():
@@ -992,7 +1259,7 @@ def test_check_hinton_area_catches_side_proportional_to_magnitude():
     b = Block(1, 2, values=np.array([[1.0, 4.0]]))
     bad = []
     for j, v in ((0, 1.0), (1, 4.0)):
-        cx, cy = b.cell_center(0, j)
+        cx, cy = b.center(0, j)
         h = 0.1 * v                          # side ∝ |v| — the classic bug
         bad.append(FC(np.array([[cx - h, cy - h], [cx + h, cy - h],
                                 [cx + h, cy + h], [cx - h, cy + h]])))
@@ -1065,7 +1332,7 @@ def check_conformable(checks, terms: Sequence[Block | str]) -> None:
 
 
 def check_cell_uniform(checks, blocks: Sequence[Block]) -> None:
-    """One cell size across the figure.
+    """One (cell, aspect) across the figure.
 
     Two matrices drawn at different scales make their shapes
     incomparable — the reader cannot see that A's column count matches
@@ -1074,11 +1341,28 @@ def check_cell_uniform(checks, blocks: Sequence[Block]) -> None:
     """
     if not blocks:
         return
-    ref = blocks[0].cell
+    ref_c, ref_a = blocks[0].cell, blocks[0].aspect
     for b in blocks[1:]:
-        checks.check(abs(b.cell - ref) < 1e-12,
-                     f"{_nm(b)}: cell {b.cell:g} != {ref:g} — blocks at "
-                     f"different scales are not comparable")
+        checks.check(abs(b.cell - ref_c) < 1e-12
+                     and abs(b.aspect - ref_a) < 1e-12,
+                     f"{_nm(b)}: (cell {b.cell:g}, aspect {b.aspect:g}) != "
+                     f"({ref_c:g}, {ref_a:g}) — blocks at different scales "
+                     f"are not comparable")
+
+
+def check_square_cells(checks, blocks: Sequence[Block]) -> None:
+    """Every block has square cells, so its drawn aspect ratio IS its shape.
+
+    Call this from any figure arguing about *dimensions* — a
+    factorization, a conformability claim, a block algorithm. Do NOT call
+    it on a basis gallery: there, `aspect != 1.0` is a deliberate opt-out
+    (the cells hold waveforms and the figure makes no claim about shape),
+    and the two cases are told apart by which figures call this.
+    """
+    for b in blocks:
+        checks.check(abs(b.aspect - 1.0) < 1e-12,
+                     f"{_nm(b)}: aspect {b.aspect:g} != 1 — the drawn "
+                     f"rectangle no longer shows the shape ({b.m}, {b.n})")
 
 
 def check_no_overlap(checks, blocks: Sequence[Block]) -> None:
@@ -1086,9 +1370,9 @@ def check_no_overlap(checks, blocks: Sequence[Block]) -> None:
     the row collides two blocks, and the operator then reads as inside one
     of them."""
     for i, a in enumerate(blocks):
-        ax0, ax1, ay0, ay1 = a.bbox
+        ax0, ax1, ay0, ay1 = a.extent
         for b in blocks[i + 1:]:
-            bx0, bx1, by0, by1 = b.bbox
+            bx0, bx1, by0, by1 = b.extent
             hit = (min(ax1, bx1) - max(ax0, bx0) > 1e-9
                    and min(ay1, by1) - max(ay0, by0) > 1e-9)
             checks.check(not hit,
@@ -1170,35 +1454,18 @@ def check_hinton_area(checks, b: Block, squares: Sequence[FilledCurve], *,
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `make test`
-Expected: PASS — 36 tests in `tests/test_matrix.py`, no regressions elsewhere.
+Expected: PASS — 47 tests in `tests/test_matrix.py`, no regressions elsewhere.
 
-- [ ] **Step 5: Amend the spec**
-
-In `docs/superpowers/specs/2026-07-29-matrix-layer-design.md`, replace the `check_shape_faithful` bullet in §4 with:
-
-```markdown
-- `check_cell_uniform(checks, blocks)` — one cell size across the figure.
-  Two matrices at different scales make their shapes incomparable. `expr`
-  guarantees this within a row; a hand-placed block alongside is what this
-  catches. (Replaces the spec's original `check_shape_faithful`: with
-  `width = n*cell` and `height = m*cell`, drawn aspect ratio equals `m/n`
-  by construction, so asserting it would be gate theater.)
-- `check_no_overlap(checks, blocks)` — no two drawn matrices share area; a
-  `gap` too small collides two blocks and the operator then reads as
-  inside one of them.
-```
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/figlib/matrix.py tests/test_matrix.py docs/superpowers/specs/2026-07-29-matrix-layer-design.md
-git commit -m "matrix: the gates — conformable, cell-uniform, no-overlap, expr, hinton area
+git add src/figlib/matrix.py tests/test_matrix.py
+git commit -m "matrix: the gates — conformable, cell/square, no-overlap, expr, hinton area
 
 check_expr is the load-bearing one: evaluate the drawn factorization in
-numpy and prove the picture is true, not merely plausible.
-
-Spec amended: check_shape_faithful was a tautology given width = n*cell,
-so it is replaced by two checks that can actually fail."
+numpy and prove the picture is true, not merely plausible. The others
+each catch a drawn lie: mismatched scales, tall cells under a shape
+claim, colliding blocks, a side-proportional Hinton diagram."
 ```
 
 ---
@@ -1233,7 +1500,7 @@ from figlib.format import WIDE
 from figlib.gates import Checks
 from figlib.matrix import (Block, bands, bounds, check_cell_uniform,
                            check_conformable, check_expr, check_no_overlap,
-                           expr, lattice, outline, rank1)
+                           check_square_cells, expr, lattice, outline, rank1)
 from figlib.scene import MathLabel, Scene
 from figlib.style import Role
 from figlib.theme import RISO
@@ -1307,8 +1574,8 @@ def build(g):
           *bands(views[3], "row", color=row_hue, gap=p["band_gap"]))
     s.add(*view_ops)
     for b, cap in zip(views, VIEW_CAPTIONS):
-        s.add(MathLabel(cap, (b.bbox[0] + b.width / 2,
-                              b.bbox[2] - p["caption_drop"]),
+        s.add(MathLabel(cap, (b.extent[0] + b.width / 2,
+                              b.extent[2] - p["caption_drop"]),
                         role=Role.ANNOTATION, ha="center", va="center",
                         size_pt=9.0))
 
@@ -1318,12 +1585,12 @@ def build(g):
         s.add(*rank1(b, k, k, col_color=col_hue, row_color=row_hue))
         s.add(*outline(b))
         s.add(MathLabel(rf"\boldsymbol{{a}}_{k + 1}\boldsymbol{{b}}_{k + 1}^{{T}}",
-                        (b.bbox[0] + b.width / 2, b.bbox[2] - p["caption_drop"]),
+                        (b.extent[0] + b.width / 2, b.extent[2] - p["caption_drop"]),
                         role=Role.ANNOTATION, ha="center", va="center",
                         size_pt=9.0))
     s.add(*sum_ops)
-    s.add(MathLabel(r"AB", (sums[0].bbox[0] + sums[0].width / 2,
-                            sums[0].bbox[2] - p["caption_drop"]),
+    s.add(MathLabel(r"AB", (sums[0].extent[0] + sums[0].width / 2,
+                            sums[0].extent[2] - p["caption_drop"]),
                     role=Role.ANNOTATION, ha="center", va="center",
                     size_pt=9.0))
 
@@ -1348,6 +1615,8 @@ def assertions(g):
     blocks = [t for t in placed_view + placed_sum if isinstance(t, Block)]
     check_cell_uniform(c, blocks)
     check_no_overlap(c, blocks)
+    # this figure argues about dimensions, so its cells must stay square
+    check_square_cells(c, blocks)
     # the rank-1 claim itself: each drawn term has rank exactly 1
     for k, T in enumerate(g["terms"]):
         c.check(np.linalg.matrix_rank(T) == 1,
@@ -1425,7 +1694,8 @@ from figlib.format import WIDE
 from figlib.gates import Checks
 from figlib.matrix import (Block, bounds, causal, check_cell_uniform,
                            check_conformable, check_expr, check_hinton_area,
-                           check_no_overlap, expr, heat, hinton, mask, outline)
+                           check_no_overlap, check_square_cells, expr, heat,
+                           hinton, mask, outline)
 from figlib.scene import MathLabel, Scene
 from figlib.style import Role
 from figlib.theme import RISO
@@ -1506,8 +1776,8 @@ def build(g):
         s.add(*outline(b))
         cap = (r"A_4" if k == 0
                else rf"\sigma_{k}\boldsymbol{{u}}_{k}\boldsymbol{{v}}_{k}^{{T}}")
-        s.add(MathLabel(cap, (b.bbox[0] + b.width / 2,
-                              b.bbox[3] + p["caption_drop"]),
+        s.add(MathLabel(cap, (b.extent[0] + b.width / 2,
+                              b.extent[3] + p["caption_drop"]),
                         role=Role.ANNOTATION, ha="center", va="bottom",
                         size_pt=9.0))
     s.add(*ops)
@@ -1520,7 +1790,7 @@ def build(g):
                origin=p["hinton_origin"], cell=p["hinton_cell"], name="Vt")
     s.add(*outline(hb), *hinton(hb))
     s.add(MathLabel(r"\boldsymbol{v}_1..\boldsymbol{v}_4\ \mathrm{(sign)}",
-                    (hb.bbox[0], hb.bbox[2] - p["caption_drop"]),
+                    (hb.extent[0], hb.extent[2] - p["caption_drop"]),
                     role=Role.ANNOTATION, ha="left", va="center",
                     size_pt=9.0))
 
@@ -1528,7 +1798,7 @@ def build(g):
     s.add(MathLabel(
         rf"\|A - A_4\|_F / \|A\|_F = {g['resid']:.3f}"
         rf"\quad ({100 * g['energy']:.1f}\%\ \mathrm{{energy\ kept}})",
-        (placed[0].bbox[0], hb.bbox[3] + p["caption_drop"]),
+        (placed[0].extent[0], hb.extent[3] + p["caption_drop"]),
         role=Role.ANNOTATION, ha="left", va="bottom", size_pt=10.0))
 
     xlim, ylim = bounds(list(placed) + [hb], pad=p["pad"])
@@ -1548,6 +1818,7 @@ def assertions(g):
     blocks = [t for t in drawn if isinstance(t, Block)]
     check_cell_uniform(c, blocks)
     check_no_overlap(c, blocks)
+    check_square_cells(c, blocks)
     # each drawn summand is genuinely rank 1
     for k, T in enumerate(g["terms"]):
         c.check(np.linalg.matrix_rank(T) == 1, f"term {k} is not rank 1")
@@ -1706,9 +1977,11 @@ written first in every task. Follow-on → Task 8.
 **Placeholders.** None: every code step carries the actual code, every
 test step the actual assertions, every command the actual invocation.
 
-**Type consistency.** `Block.bbox` returns `(x0, x1, y0, y1)` and is used
+**Type consistency.** `Block.extent` returns `(x0, x1, y0, y1)` and is used
 in that order by `heat` (RasterField extent), `bounds`, `check_no_overlap`,
-and both figures. `expr` returns `(ops, placed)` in that order at every
+`grid_lines`, `brackets`, `edge`, and both figures. `center` (not
+`cell_center`) and `extent` (not `bbox`) are the names everywhere, matching
+the merged signals spec. `expr` returns `(ops, placed)` in that order at every
 call site. `_values`, `_nm`, `_split`, `_product_blocks`, `_inset` are each
 defined once and used with matching signatures. Checkers all take `checks`
 first and return `None`.

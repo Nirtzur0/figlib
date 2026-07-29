@@ -76,57 +76,39 @@ Nothing else: overlap shading is `band` (already exists — the aliasing
 overlap is `band(x, 0, np.minimum(f1, f2))`), shared-abscissa stacking
 is `Figure` rows with equal `Scale` ranges asserted in `assertions()`.
 
-## New module `src/figlib/matrix.py`
+## `src/figlib/matrix.py` — MERGED, owned elsewhere
+
+**Superseded.** This spec's `CellGrid` and the matrix-layer spec's `Block`
+were independently designed as the same object in the same new module:
+frozen, draws-nothing, top-left origin, row 0 at the top. They are now one
+type, **`Block`**, specified in `2026-07-29-matrix-layer-design.md` §1,
+which absorbs `map_into`, `edge`, `extent`, and `center` verbatim from the
+sketch above.
+
+One substantive change to what was written here. `CellGrid` carried
+`cell: (width, height)`; `Block` carries a scalar `cell` plus an explicit
+`aspect` (height/width, default `1.0`). Square cells are what make a
+drawn rectangle's aspect ratio *equal its shape*, which is what the
+matrix-layer conformability gates rest on — so the basis gallery's
+non-square cells become an opt-out stated on the record rather than the
+unremarked default.
+
+The producers sketched here stay, and land with the matrix-layer plan:
 
 ```python
-@dataclass(frozen=True)
-class CellGrid:
-    """Addressable m x n cell geometry in math coordinates. Draws nothing.
-
-    Matrix convention: row i increases DOWNWARD from the top-left origin,
-    so cell (0, 0) is the matrix's top-left entry and the picture matches
-    the algebra. origin is the top-left corner of cell (0, 0).
-    """
-    origin: tuple[float, float]
-    shape: tuple[int, int]          # (m rows, n cols)
-    cell: tuple[float, float]       # (width, height) in math units
-
-    def rect(self, i, j) -> np.ndarray        # (4, 2) corners, CCW
-    def center(self, i, j) -> tuple[float, float]
-    def map_into(self, i, j, pts, *, src=((0, 1), (0, 1))) -> np.ndarray
-        # affine-map pts from a local (u, v) frame into cell (i, j);
-        # v UP within the cell. THE inset bridge: compute a mini stem
-        # plot / waveform / anything in local coords, map, emit. This is
-        # what makes "basis gallery" a recipe instead of a primitive.
-    @property
-    def extent(self) -> tuple[float, float, float, float]
-        # (x0, x1, y0, y1) of the whole grid — aligns a RasterField
-        # to the same cells for the large-matrix path.
-    def edge(self, side, *, pad=0.0) -> np.ndarray
-        # (2, 2) segment along "left" | "right" | "top" | "bottom",
-        # anchor line for brackets, index labels, dimension braces
-```
-
-Producers (free functions, all → items):
-
-```python
-def grid_lines(g, *, role=Role.FRAME, inner=True, outer=True) -> list[Curve]
-def brackets(g, *, pad=None, tick=None, role=Role.ANNOTATION) -> list[Curve]
-    # the two square-bracket glyphs [ ] as 3-segment Curves
-def cell_fills(g, values, *, ramp, vmin=None, vmax=None,
+def grid_lines(b, *, role=Role.FRAME, inner=True, outer=True) -> list[Curve]
+def brackets(b, *, pad=None, tick=None, role=Role.ANNOTATION) -> list[Curve]
+def cell_fills(b, *, ramp, vmin=None, vmax=None,
                role=Role.CONTENT, opacity=1.0) -> list[FilledCurve]
-    # small-matrix heatmap: one FilledCurve per cell through a theme
-    # ramp. Large matrices use RasterField at g.extent instead — both
-    # paths documented in the docstring, the author chooses.
-def diag_cells(shape, offset=0, *, wrap=False) -> list[tuple[int, int]]
-    # index helper: the k-th diagonal, optionally wrapped (circulant).
-    # Structure portraits = cell_fills / markers over these indices;
-    # Toeplitz-constancy and circulant-wrap become one-liners.
+    # the vector path for small matrices; `heat` is the raster path for
+    # large ones. Both stay; the docstrings state the tradeoff.
 ```
 
-That is the whole module. Row/col index labels, deleted-row strikes,
-value annotations, basis galleries: all compositions of `center`/
-`map_into`/`edge` with existing MathLabel/Curve/stems.
+`diag_cells` is absorbed into the matrix-layer's mask recipes as
+`diagonal(b, offset=0, wrap=False) -> np.ndarray`; a call site needing
+index pairs uses `np.argwhere`. Row/col index labels, deleted-row strikes,
+value annotations, and basis galleries remain compositions of
+`center`/`map_into`/`edge` with MathLabel/Curve/stems.
 
 ## `colorbar` (in `plots.py`)
 

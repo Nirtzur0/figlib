@@ -64,24 +64,61 @@ legs, not a 2-D shape to draw to scale; forcing it into `Block` would
 corrupt the shape-is-geometry invariant. Separate spec, against
 `schematic.py`.
 
+## 0. Merged with the signals & linear-algebra spec
+
+`2026-07-29-signals-linalg-design.md` independently specified `CellGrid`
+in the same new module `src/figlib/matrix.py`: the same frozen, draws-
+nothing, top-left-origin, row-0-at-top cell geometry. Two names for one
+object is exactly the drift `architecture.md` exists to prevent, so they
+are **one type, `Block`**, owned by this spec. That spec now defers here
+for the geometry and keeps only its own producers.
+
+The merge is not cosmetic. `CellGrid` carried `cell: (width, height)` —
+non-square cells, needed for the DFT basis gallery where each cell holds a
+mini waveform. `Block` needs a scalar cell, because square cells are what
+make the drawn aspect ratio equal the shape and the conformability gates
+mean anything. Resolution: scalar `cell` plus an explicit `aspect`
+(cell height / cell width, default `1.0`). `aspect == 1.0` is the matrix
+case and the default; a gallery opts out by saying so, on the record.
+
 ## 1. The core object — shape is geometry
 
 ```python
 @dataclass(frozen=True)
 class Block:
-    """A matrix drawn to shape. The rectangle is m*cell tall by n*cell
-    wide, so the drawn aspect ratio IS (m, n)."""
+    """A matrix drawn to shape: n*cell wide, m*cell*aspect tall.
+
+    Draws nothing — it answers coordinate questions and the author
+    composes items against it.
+    """
     m: int
     n: int
-    origin: XY = (0.0, 0.0)           # top-left, math coords
-    cell: float = 1.0
+    origin: XY = (0.0, 0.0)           # TOP-left, math coords
+    cell: float = 1.0                 # cell WIDTH in math units
+    aspect: float = 1.0               # cell height / width; 1.0 = square
     values: np.ndarray | None = None  # optional; unlocks value encoders
     name: str = ""
 ```
 
-Derived geometry only, emitting no items: `rect()`, `cols(j0, j1)`,
-`rows(i0, i1)`, `cell_rect(i, j)`, `cell_center(i, j)`,
-`sub(rslice, cslice) -> Block`, `width`, `height`, `bbox`.
+`m` and `n` are two ints rather than a `shape` tuple because the whole
+point is that `A.n == B.m` reads as the conformability question it is.
+
+Derived geometry only, emitting no items: `rect()`, `span(j0, j1, i0, i1)`,
+`cols(j0, j1)`, `rows(i0, i1)`, `cell_rect(i, j)`, `center(i, j)`,
+`sub(rslice, cslice) -> Block`, `at(origin, cell=None) -> Block`,
+`width`, `height`, `extent`, plus two from the signals spec:
+
+- `map_into(i, j, pts, *, src=((0,1),(0,1)))` — affine-map points from a
+  local `(u, v)` frame into cell `(i, j)`, `v` UP within the cell. The
+  inset bridge: compute a mini stem plot or waveform in local coords, map
+  it, emit it. This is what makes "basis gallery" a recipe rather than a
+  primitive.
+- `edge(side, *, pad=0.0)` — the `(2, 2)` segment along `"left"` /
+  `"right"` / `"top"` / `"bottom"`; the anchor line for brackets, index
+  labels, and dimension braces.
+
+`extent` returns `(x0, x1, y0, y1)` and is named for the `RasterField`
+parameter it is passed to.
 
 Same discipline as `schematic.connect`: geometry is derived once, render
 and gates both read it, so they cannot drift.
@@ -108,18 +145,30 @@ no encoder names a color.
 | `lattice(b)` | `mn` entries as dots | Point grid |
 | `mask(b, M)` | triangular / banded / sparsity / causal | FilledCurve per run of true cells |
 | `rank1(b, j, i)` | outer product `a_j b_iᵀ` | column band + row band + faint whole |
+| `grid_lines(b, ...)` | ruled cells | Curve per inner/outer rule |
+| `brackets(b, ...)` | the `[ ]` glyphs | two 3-segment Curves |
 
 `mask` takes a bool array or a predicate `(i, j) -> bool`. `tri("lower")`,
-`banded(k)`, `causal()` are three-line helpers built on it inside the
-module — recipes, not primitives.
+`banded(lo, hi)`, `diagonal(k, wrap=False)` and `causal()` are three-line
+mask helpers inside the module — recipes, not primitives. `wrap` on
+`diagonal` is what makes a circulant portrait a one-liner; a call site
+that needs index pairs rather than a mask uses `np.argwhere`.
+
+`grid_lines` and `brackets` come from the signals spec.
 
 **Value**
 
 | function | encoding |
 |---|---|
-| `heat(b, ...)` | `RasterField` over `b.rect()` — exists, wired to Block |
+| `heat(b, ...)` | `RasterField` over `b.extent` — the dense path |
+| `cell_fills(b, ...)` | one FilledCurve per cell through a ramp — the vector path |
 | `hinton(b)` | one square per entry, **area** ∝ \|v\|, fill by sign |
 | `entries(b, fmt)` | MathLabel per cell; small `m, n` only |
+
+`heat` and `cell_fills` (the latter from the signals spec) are the same
+encoding at two densities and both stay: a 32×32 attention map wants one
+raster, an 8×8 wants vector cells that inherit theming and gates. The
+docstrings state the tradeoff; the author chooses.
 
 `hinton` is the only genuinely new mark in the module.
 
@@ -149,8 +198,18 @@ Exported checkers, called from a figure's `assertions()` via
 - `check_conformable(checks, terms)` — walk the **drawn** term list: every
   adjacent `A @ B` has `A.n == B.m`; every `+` has equal-shaped operands;
   both sides of `=` are equal-shaped.
-- `check_shape_faithful(checks, b)` — drawn aspect ratio equals `m/n`
-  (catches a hand-set `cell` or `origin` override).
+- `check_cell_uniform(checks, blocks)` — one `(cell, aspect)` across the
+  figure. Two matrices at different scales make their shapes
+  incomparable. `expr` guarantees it within a row; a hand-placed block
+  alongside is what this catches. (Replaces an earlier
+  `check_shape_faithful`: with `width = n*cell`, drawn aspect ratio
+  equals `m/n` by construction, so asserting it would be gate theater.)
+- `check_no_overlap(checks, blocks)` — no two drawn matrices share area;
+  a `gap` too small collides two blocks and the operator then reads as
+  inside one of them.
+- `check_square_cells(checks, blocks)` — every block claiming to argue
+  about *shape* has `aspect == 1.0`. A gallery that opts out is fine; a
+  factorization figure that opts out is drawing a lie about dimensions.
 - `check_expr(checks, terms, rtol)` — when every Block carries `values`,
   evaluate the drawn expression in numpy and assert it holds. Draw
   `A = UΣVᵀ` and the gate *proves the picture is of a true
@@ -190,6 +249,11 @@ readback record exists.
    blocks in an expression row, truncation error annotated on the figure.
    Exercises `heat`, `expr`, `check_expr` at `rtol`. Hinton lands here as
    the small-matrix inset.
+
+The signals spec's `figures/dft_matrix_basis.py` is the third benchmark
+and the one that exercises the merged surface end to end — `map_into`,
+`brackets`, `cell_fills`, and `aspect != 1.0` — so it stays owned by that
+spec and lands with its plan.
 
 ## 7. Tests
 
