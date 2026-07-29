@@ -115,3 +115,20 @@ def test_radial_gradient_emitted():
     g = Gradient.from_ramp(ramp, (0.5, 0.5), (1.0, 0.5), kind="radial")
     svg = _svg_of([FilledCurve(_TRI, gradient=g, opacity=1.0)])
     assert "radialGradient" in svg
+
+
+def test_fill_grain_overlay_emitted():
+    svg = _svg_of([FilledCurve(_TRI, color="#c0504d", opacity=1.0, grain=0.4)])
+    assert 'fill="url(#grain)"' in svg
+
+
+def test_fill_grain_skipped_when_zero():
+    svg = _svg_of([FilledCurve(_TRI, color="#c0504d", opacity=1.0)])
+    assert 'fill="url(#grain)"' not in svg
+
+
+def test_fill_grain_skipped_on_transparent_theme():
+    from figlib.theme import RISO_T
+    svg = _svg_of([FilledCurve(_TRI, color="#c0504d", opacity=1.0, grain=0.4)],
+                  style=RISO_T)
+    assert 'fill="url(#grain)"' not in svg

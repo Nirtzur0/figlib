@@ -149,18 +149,24 @@ def _emit_paper(root: ET.Element, defs: ET.Element, style: Style, w: float, h: f
                                      "height": _fmt(h), "fill": bg_fill})
 
 
-def _emit_grain(root: ET.Element, defs: ET.Element, style: Style, w: float, h: float) -> None:
-    grain = 0.0 if getattr(style, "transparent", False) else getattr(style, "grain", 0.0)
-    if grain > 0:
+def _ensure_grain_pattern(defs: ET.Element) -> str:
+    """The shared grain tile pattern def (page overlay + fill overlays)."""
+    if defs.find("./pattern[@id='grain']") is None:
         from .theme import grain_tile_datauri
         pat = ET.SubElement(defs, "pattern", {
             "id": "grain", "patternUnits": "userSpaceOnUse",
             "width": "140", "height": "140"})
         ET.SubElement(pat, "image", {
             "href": grain_tile_datauri(), "width": "140", "height": "140"})
+    return "grain"
+
+
+def _emit_grain(root: ET.Element, defs: ET.Element, style: Style, w: float, h: float) -> None:
+    grain = 0.0 if getattr(style, "transparent", False) else getattr(style, "grain", 0.0)
+    if grain > 0:
         ET.SubElement(root, "rect", {
             "x": "0", "y": "0", "width": _fmt(w), "height": _fmt(h),
-            "fill": "url(#grain)", "opacity": _fmt(grain)})
+            "fill": f"url(#{_ensure_grain_pattern(defs)})", "opacity": _fmt(grain)})
 
 
 # --- annotation glyphs (geometry shared with the mechanical gate) -----------
@@ -470,6 +476,13 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
                 _add_stroke(el, style, it.role)
             else:
                 el.set("stroke", "none")
+            if it.grain > 0 and not transparent and defs is not None:
+                gattrs = {"d": d,
+                          "fill": f"url(#{_ensure_grain_pattern(defs)})",
+                          "fill-opacity": _fmt(it.grain), "stroke": "none"}
+                if it.holes:
+                    gattrs["fill-rule"] = "evenodd"
+                ET.SubElement(root, "path", gattrs)
 
         elif isinstance(it, Vector):
             tail = t.to_canvas(it.tail)
