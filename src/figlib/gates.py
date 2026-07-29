@@ -328,18 +328,30 @@ def _corridor_free_nudges(k: int, boxes: list[LabelBox],
 def _nearest_free_center(box: tuple[float, float, float, float],
                          other_boxes: list[tuple[float, float, float, float]],
                          corridors: list[Corridor], canvas_w: float,
-                         canvas_h: float) -> tuple[float, float] | None:
+                         canvas_h: float,
+                         bounds: tuple[float, float, float, float] | None = None,
+                         ) -> tuple[float, float] | None:
     """Center of the nearest position where the box fits free of every
     corridor, other box, and the canvas edge — the fallback suggestion
-    when no single-axis nudge frees the label."""
+    when no single-axis nudge frees the label.
+
+    `bounds` restricts the scan to what the reader can actually SEE. It is the
+    frame rect for a `clip="frame"` scene, where the margin band is not free
+    real estate but a place labels are deleted: a label moved there passes
+    every gate and renders invisible, because no gate measures drawn ink. A
+    diagnostic that suggests such a position is worse than no diagnostic.
+    """
     w, h = box[2] - box[0], box[3] - box[1]
     if w > canvas_w or h > canvas_h:
+        return None
+    bx0, by0, bx1, by1 = bounds if bounds else (0.0, 0.0, canvas_w, canvas_h)
+    if w > bx1 - bx0 or h > by1 - by0:
         return None
     cx0, cy0 = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
     best: tuple[float, float] | None = None
     best_d = math.inf
-    for cx in np.arange(w / 2, canvas_w - w / 2 + 1e-9, _FREE_SCAN_STEP):
-        for cy in np.arange(h / 2, canvas_h - h / 2 + 1e-9, _FREE_SCAN_STEP):
+    for cx in np.arange(bx0 + w / 2, bx1 - w / 2 + 1e-9, _FREE_SCAN_STEP):
+        for cy in np.arange(by0 + h / 2, by1 - h / 2 + 1e-9, _FREE_SCAN_STEP):
             d = math.hypot(cx - cx0, cy - cy0)
             if d >= best_d:
                 continue
@@ -354,7 +366,7 @@ def _nearest_free_center(box: tuple[float, float, float, float],
 
 def _label_ink_checks(entries: list[LabelEntry], corridors: list[Corridor],
                       style: Style, canvas_w: float, canvas_h: float,
-                      to_math=None) -> list[Diagnostic]:
+                      to_math=None, bounds=None) -> list[Diagnostic]:
     """label-on-ink: a bare label box intersecting a content-ink corridor
     (halo=True declares the ride and exempts — see the section comment).
     The diagnostic carries the fix — verified free nudges, or the nearest
@@ -381,9 +393,9 @@ def _label_ink_checks(entries: list[LabelEntry], corridors: list[Corridor],
             opts = " or ".join(_fmt_nudge(d) for d in nudges)
             fix = f" — free: offset_px += {opts}{ride}"
         else:
-            center = _nearest_free_center(box,
-                                          [b[2] for i, b in enumerate(boxes) if i != k],
-                                          corridors, canvas_w, canvas_h)
+            center = _nearest_free_center(
+                box, [b[2] for i, b in enumerate(boxes) if i != k],
+                corridors, canvas_w, canvas_h, bounds=bounds)
             if center is None:
                 fix = " — no ink-free region fits this label; trim annotation"
             elif to_math is not None:
@@ -465,6 +477,17 @@ def _arrow_mark_checks(scene: Scene, style: Style, t: Transform,
     return diags
 
 
+def visible_bounds(scene: Scene, t: Transform
+                   ) -> tuple[float, float, float, float] | None:
+    """The canvas rect a clipped scene actually shows, or None when nothing is
+    clipped and the whole canvas is fair game."""
+    if getattr(scene, "clip", None) != "frame":
+        return None
+    x0, y0 = t.to_canvas((scene.xlim[0], scene.ylim[1]))
+    x1, y1 = t.to_canvas((scene.xlim[1], scene.ylim[0]))
+    return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+
+
 def mechanical(scene: Scene, style: Style, width_px: float = 900) -> list[Diagnostic]:
     t = Transform(scene, width_px=width_px)
     entries = _label_entries(scene, style, t)
@@ -473,7 +496,8 @@ def mechanical(scene: Scene, style: Style, width_px: float = 900) -> list[Diagno
                          type_scale=style.type_scale)
     corridors = ink_corridors(scene, style, t)
     diags += _label_ink_checks(entries, corridors, style, t.canvas_w,
-                               t.canvas_h, to_math=t.from_canvas)
+                               t.canvas_h, to_math=t.from_canvas,
+                               bounds=visible_bounds(scene, t))
     diags += _arrow_mark_checks(scene, style, t, boxes)
     return diags
 
