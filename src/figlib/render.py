@@ -13,7 +13,8 @@ from xml.etree import ElementTree as ET
 import numpy as np
 
 from .layout import Transform
-from .scene import AngleMark, Curve, MathLabel, Point, RightAngleMark, Scene, Vector
+from .scene import (AngleMark, Curve, FilledCurve, MathLabel, Point,
+                    RightAngleMark, Scene, Vector)
 from .style import DEFAULT_STYLE, Role, Style
 from .typeset import draw_math
 
@@ -70,6 +71,18 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
         if isinstance(it, Curve):
             el = ET.SubElement(root, "path", {"d": _path_d(t.to_canvas_arr(it.pts), it.closed), "fill": "none"})
             _add_stroke(el, style, it.role, it.width_scale)
+            if it.opacity < 1.0:
+                el.set("stroke-opacity", _fmt(it.opacity))
+
+        elif isinstance(it, FilledCurve):
+            ink = style.ink(it.role)
+            attrs = {"d": _path_d(t.to_canvas_arr(it.pts), closed=True),
+                     "fill": ink.color, "fill-opacity": _fmt(it.opacity)}
+            el = ET.SubElement(root, "path", attrs)
+            if it.outline:
+                _add_stroke(el, style, it.role)
+            else:
+                el.set("stroke", "none")
 
         elif isinstance(it, Vector):
             tail = t.to_canvas(it.tail)

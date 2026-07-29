@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .scene import AngleMark, Curve, MathLabel, Point, RightAngleMark, Scene, Vector
+from .scene import (AngleMark, Curve, FilledCurve, MathLabel, Point,
+                    RightAngleMark, Scene, Vector)
 
 
 def geometry_extents(scene: Scene) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -13,7 +14,7 @@ def geometry_extents(scene: Scene) -> tuple[tuple[float, float], tuple[float, fl
     xs: list[float] = []
     ys: list[float] = []
     for it in scene.items:
-        if isinstance(it, Curve):
+        if isinstance(it, (Curve, FilledCurve)):
             xs.extend(it.pts[:, 0])
             ys.extend(it.pts[:, 1])
         elif isinstance(it, Vector):
@@ -50,20 +51,25 @@ class Transform:
         pad_x = pad_frac * dx
         pad_y = pad_frac * dy
         x0, x1, y0, y1 = x0 - pad_x, x1 + pad_x, y0 - pad_y, y1 + pad_y
-        self.scale = width_px / (x1 - x0)
+        self.scale_x = width_px / (x1 - x0)
+        if scene.height_px is None:
+            self.scale_y = self.scale_x          # equal aspect
+        else:
+            self.scale_y = scene.height_px / (y1 - y0)
+        self.scale = self.scale_x
         self.canvas_w = width_px
-        self.canvas_h = (y1 - y0) * self.scale
+        self.canvas_h = (y1 - y0) * self.scale_y
         self._x0 = x0
         self._y1 = y1
 
     def to_canvas(self, xy: tuple[float, float]) -> tuple[float, float]:
         return (
-            (xy[0] - self._x0) * self.scale,
-            (self._y1 - xy[1]) * self.scale,
+            (xy[0] - self._x0) * self.scale_x,
+            (self._y1 - xy[1]) * self.scale_y,
         )
 
     def to_canvas_arr(self, pts: np.ndarray) -> np.ndarray:
         out = np.empty_like(pts, dtype=float)
-        out[:, 0] = (pts[:, 0] - self._x0) * self.scale
-        out[:, 1] = (self._y1 - pts[:, 1]) * self.scale
+        out[:, 0] = (pts[:, 0] - self._x0) * self.scale_x
+        out[:, 1] = (self._y1 - pts[:, 1]) * self.scale_y
         return out

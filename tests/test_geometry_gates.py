@@ -75,3 +75,45 @@ class TestNumericalGate:
         diags = numerical(bad)
         assert len(diags) == 1 and diags[0].kind == "numerical"
         assert "fixed point" in diags[0].detail
+
+
+class TestDiffusion:
+    def setup_method(self):
+        from figlib.geometry import Mixture1D
+        self.m0 = Mixture1D(np.array([0.5, 0.5]), np.array([-1.8, 1.5]), np.array([0.12, 0.12]))
+
+    def test_marginal_at_large_t_is_standard_normal(self):
+        from figlib.geometry import ou_marginal
+        mT = ou_marginal(self.m0, 6.0)
+        assert np.allclose(mT.means, 0, atol=1e-2)
+        assert np.allclose(mT.sigmas, 1, atol=1e-2)
+
+    def test_score_of_single_gaussian_is_linear(self):
+        from figlib.geometry import Mixture1D, mixture_score
+        g = Mixture1D(np.array([1.0]), np.array([0.5]), np.array([2.0]))
+        x = np.array([-1.0, 0.0, 3.0])
+        assert np.allclose(mixture_score(g, x), (0.5 - x) / 4.0)
+
+    def test_ode_transport_reproduces_data_distribution(self):
+        from figlib.geometry import ou_marginal, pf_ode_paths, sample_mixture
+        rng = np.random.default_rng(0)
+        T = 2.5
+        x_T = sample_mixture(ou_marginal(self.m0, T), 800, rng)
+        _, paths = pf_ode_paths(self.m0, x_T, T, 200)
+        end = paths[:, -1]
+        left = end < 0
+        assert abs(left.mean() - 0.5) < 0.05
+        assert abs(end[left].mean() - (-1.8)) < 0.08
+        assert abs(end[~left].mean() - 1.5) < 0.08
+
+    def test_sde_transport_reproduces_data_distribution(self):
+        from figlib.geometry import ou_marginal, reverse_sde_paths, sample_mixture
+        rng = np.random.default_rng(1)
+        T = 2.5
+        x_T = sample_mixture(ou_marginal(self.m0, T), 1500, rng)
+        _, paths = reverse_sde_paths(self.m0, x_T, T, 400, rng)
+        end = paths[:, -1]
+        left = end < 0
+        assert abs(left.mean() - 0.5) < 0.06
+        assert abs(end[left].mean() - (-1.8)) < 0.1
+        assert abs(end[~left].mean() - 1.5) < 0.1

@@ -21,6 +21,15 @@ class Curve:
     role: Role = Role.CONTENT
     closed: bool = False
     width_scale: float = 1.0
+    opacity: float = 1.0
+
+
+@dataclass
+class FilledCurve:
+    pts: np.ndarray                # (N, 2), closed implicitly
+    role: Role = Role.CONTENT
+    opacity: float = 0.18
+    outline: bool = True
 
 
 @dataclass
@@ -68,7 +77,7 @@ class AngleMark:
     role: Role = Role.ANNOTATION
 
 
-Item = Curve | Vector | Point | MathLabel | RightAngleMark | AngleMark
+Item = Curve | FilledCurve | Vector | Point | MathLabel | RightAngleMark | AngleMark
 
 
 @dataclass
@@ -76,6 +85,9 @@ class Scene:
     items: list[Item] = field(default_factory=list)
     xlim: tuple[float, float] | None = None
     ylim: tuple[float, float] | None = None
+    # None -> equal aspect (geometry in the plane); a float -> canvas
+    # height in px, axes scaled independently (e.g. (t, x) plots)
+    height_px: float | None = None
 
     def add(self, *items: Item) -> None:
         self.items.extend(items)
