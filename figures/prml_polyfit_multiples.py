@@ -273,6 +273,13 @@ CORRESPONDENCE = [
         varies="the degree M of the least-squares polynomial",
         # 'data' and 'truth' are absent on purpose: they are the fixed set,
         # and the figure fails the moment either stops matching.
+        # NOTE: changes=("fit",) is currently satisfied by the per-panel
+        # caption's TEXT ("... degree M = <k>"), not by the fit curve's
+        # geometry — correspond._facet's fingerprint is (type, role, color,
+        # dash, filled, text) and excludes position, so a swept-geometry
+        # family whose instances carry no differing label (e.g. curve
+        # position/shape alone) would false-fire stale-change here. Library
+        # follow-up pending; see task-10-report.md friction item 1.
         changes=("fit",),
     ),
 ]
@@ -283,6 +290,7 @@ def assertions(g):
     ck = Checks()
     x, t = g["x"], g["t"]
 
+    v = p["t_view"]
     for f in g["fits"]:
         m, r = f["M"], f["resid"]
         # The least-squares certificate: the residual is orthogonal to every
@@ -293,13 +301,24 @@ def assertions(g):
             ck.check(abs(proj) < 1e-9,
                      f"M={m}: residual not orthogonal to the degree-{k} "
                      f"column (<r, u^{k}> = {proj:.3e}) — not a least-squares fit")
-        # the drawn segments live in the band, and the clipper did not invent
-        # a point outside it
-        for seg in f["segments"]:
-            hi = float(np.max(np.abs(seg[:, 1])))
-            ck.check(hi <= p["t_view"] + 1e-12,
-                     f"M={m}: a drawn segment reaches |t| = {hi:.4f}, outside "
-                     f"the {p['t_view']} band")
+        # Not "every segment stays inside [-v, v]" — _clip_band emits only
+        # points inside the band by construction, so that would be true by
+        # construction and could never fail. The real fragility is upstream
+        # of the clipper: if two ADJACENT samples of the dense curve land on
+        # opposite sides of the band (one below -v, the next above +v, or
+        # the mirror), _clip_band never sees an inside point to anchor a
+        # segment on and silently drops the whole crossing — a visible
+        # excursion through the band would vanish from the page with no
+        # signal. Sampling xx densely enough that consecutive points can't
+        # jump the full band height is the actual invariant this figure
+        # relies on; assert it directly rather than the tautology.
+        yy = f["y_curve"]
+        ck.check(not ((yy[:-1] < -v) & (yy[1:] > v)).any(),
+                 f"M={m}: an adjacent sample pair jumps from below -{v} to "
+                 f"above {v} — _clip_band would drop that crossing entirely")
+        ck.check(not ((yy[:-1] > v) & (yy[1:] < -v)).any(),
+                 f"M={m}: an adjacent sample pair jumps from above {v} to "
+                 f"below -{v} — _clip_band would drop that crossing entirely")
 
     by_m = {f["M"]: f for f in g["fits"]}
 
