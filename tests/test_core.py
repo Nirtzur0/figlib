@@ -40,8 +40,8 @@ class TestLayout:
     def test_geometry_extents_cover_curve(self):
         scene = make_scene()
         (x0, x1), (y0, y1) = geometry_extents(scene)
-        assert x0 == pytest.approx(-1.0, abs=1e-2) and x1 >= 1.0
-        assert y0 == pytest.approx(-1.0, abs=1e-2) and y1 >= 1.0
+        assert x0 == pytest.approx(-1.0, abs=1e-2) and x1 == pytest.approx(1.0, abs=1e-2)
+        assert y0 == pytest.approx(-1.0, abs=1e-2) and y1 == pytest.approx(1.0, abs=1e-2)
 
     def test_transform_round_trip_and_yflip(self):
         scene = make_scene()
