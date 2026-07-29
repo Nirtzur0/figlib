@@ -116,7 +116,10 @@ def _label_entries(scene: Scene, style: Style, t: Transform) -> list[LabelEntry]
             entries.append((_canvas_label_box(lab, style), None))
         elif isinstance(it, Callout):
             pt = style.label_pt(it.size_pt)
-            entries.append(((it.latex, pt, callout_ink(it, t, style).box), None))
+            # owner = the Callout itself: consumers must treat it as
+            # pinned (anchors aren't offset-nudgeable); its paper box is
+            # declared ink-cover when boxed, like halo on a MathLabel
+            entries.append(((it.latex, pt, callout_ink(it, t, style).box), it))
     return entries
 
 
@@ -229,12 +232,17 @@ def _check_boxes(boxes: list[LabelBox], canvas_w: float, canvas_h: float,
 
 # --- ink corridors: content strokes as keep-out regions ---------------------
 #
-# A label or halo sitting on content ink is the #1 post-PASS defect: the
-# gate passed, the figure was wrong, and a human looked at pixels to say so.
+# A label sitting on content ink is the #1 post-PASS defect: the gate
+# passed, the figure was wrong, and a human looked at pixels to say so.
 # The corridor makes it mechanical — every CONTENT/ACCENT stroke owns a
 # keep-out band of half its stroke width plus a pad, and label boxes must
-# stay out. Scaffolding (CONSTRUCTION/FRAME/MUTED) is exempt: halos may cut
-# scaffolding, never content.
+# stay out. Two exemptions, both declarations rather than accidents:
+# scaffolding roles (CONSTRUCTION/FRAME/MUTED) may be overwritten, and a
+# label with halo=True is the author saying "this label rides busy ink" —
+# the cartographic-halo idiom the corpus uses over curve families. What
+# the gate polices is the unmarked case: a bare label on content ink is
+# either a defect (move it — the nudge is computed) or a ride that must
+# be declared (halo=True).
 
 _CORRIDOR_ROLES = frozenset({Role.CONTENT, Role.ACCENT1, Role.ACCENT2})
 _CORRIDOR_PAD = 2.0
@@ -308,18 +316,13 @@ def _shift(box: tuple[float, float, float, float], dx: float,
     return (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
 
 
-def _inflate(box: tuple[float, float, float, float],
-             pad: float) -> tuple[float, float, float, float]:
-    return (box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad)
-
-
 def _corridor_free_nudges(k: int, boxes: list[LabelBox],
                           corridors: list[Corridor], canvas_w: float,
-                          canvas_h: float, pad: float = 0.0,
+                          canvas_h: float,
                           max_move: int = _CORRIDOR_NUDGE_MAX) -> list[tuple[float, float]]:
-    """Smallest single-axis moves taking box k (inflated by pad for the
-    corridor test — the halo) clear of every corridor, verified against all
-    other boxes and the canvas. Smallest first, at most two."""
+    """Smallest single-axis moves taking box k clear of every corridor,
+    verified against all other boxes and the canvas. Smallest first, at
+    most two."""
     box = boxes[k][2]
     out: list[tuple[float, float]] = []
     for m in range(1, max_move + 1):
@@ -328,7 +331,7 @@ def _corridor_free_nudges(k: int, boxes: list[LabelBox],
             cand = _shift(box, dx, dy)
             if cand[0] < 0 or cand[1] < 0 or cand[2] > canvas_w or cand[3] > canvas_h:
                 continue
-            if corridor_hit(_inflate(cand, pad), corridors) is not None:
+            if corridor_hit(cand, corridors) is not None:
                 continue
             if any(_overlap(cand, boxes[j][2])
                    for j in range(len(boxes)) if j != k):
@@ -366,33 +369,28 @@ def _nearest_free_center(box: tuple[float, float, float, float],
     return best
 
 
-def _entry_pad(owner: MathLabel | None, style: Style) -> float:
-    """Corridor clearance a label needs beyond its glyph box: the halo cuts
-    ink halo_width past the glyphs, so a haloed box is checked inflated."""
-    return style.halo_width if (owner is not None and owner.halo) else 0.0
-
-
 def _label_ink_checks(entries: list[LabelEntry], corridors: list[Corridor],
                       style: Style, canvas_w: float, canvas_h: float,
                       to_math=None) -> list[Diagnostic]:
-    """label-on-ink: a label/halo box intersecting a content-ink corridor.
+    """label-on-ink: a bare label box intersecting a content-ink corridor
+    (halo=True declares the ride and exempts — see the section comment).
     The diagnostic carries the fix — verified free nudges, or the nearest
     ink-free region center when no single-axis nudge exists."""
     diags: list[Diagnostic] = []
     boxes = [box for box, _ in entries]
     for k, ((latex, _, box), owner) in enumerate(entries):
-        pad = _entry_pad(owner, style)
-        hit = corridor_hit(_inflate(box, pad), corridors)
+        if owner is not None and (getattr(owner, "halo", False)
+                                  or (isinstance(owner, Callout) and owner.boxed)):
+            continue
+        hit = corridor_hit(box, corridors)
         if hit is None:
             continue
-        halo_note = " (halo cuts it)" if pad else ""
-        nudges = _corridor_free_nudges(k, boxes, corridors, canvas_w,
-                                       canvas_h, pad=pad)
+        nudges = _corridor_free_nudges(k, boxes, corridors, canvas_w, canvas_h)
         if nudges:
             opts = " or ".join(_fmt_nudge(d) for d in nudges)
-            fix = f" — free: offset_px += {opts}"
+            fix = f" — free: offset_px += {opts}, or declare halo=True"
         else:
-            center = _nearest_free_center(_inflate(box, pad),
+            center = _nearest_free_center(box,
                                           [b[2] for i, b in enumerate(boxes) if i != k],
                                           corridors, canvas_w, canvas_h)
             if center is None:
@@ -400,13 +398,15 @@ def _label_ink_checks(entries: list[LabelEntry], corridors: list[Corridor],
             elif to_math is not None:
                 mx, my = to_math(center)
                 fix = (f" — no free single-axis nudge; nearest ink-free region "
-                       f"center ({mx:.3g}, {my:.3g}) in math coords")
+                       f"center ({mx:.3g}, {my:.3g}) in math coords, or "
+                       f"declare halo=True")
             else:
                 fix = (f" — no free single-axis nudge; nearest ink-free region "
-                       f"center ({center[0]:.0f}, {center[1]:.0f}) canvas px")
+                       f"center ({center[0]:.0f}, {center[1]:.0f}) canvas px, "
+                       f"or declare halo=True")
         diags.append(Diagnostic(
             "label-on-ink",
-            f"'{latex}' sits on {hit.what} ink{halo_note}{fix}"))
+            f"'{latex}' sits on {hit.what} ink{fix}"))
     return diags
 
 
@@ -697,7 +697,10 @@ def color_gate(scene: Scene, style: Style, width_px: float = 900,
             if getattr(c, "channel", None) == CORRESPONDENCE:
                 hues[str(c)] = type(it).__name__
             over = None
-            if grounds and isinstance(it, (Point, MathLabel)):
+            # A haloed label sits on its paper casing, not the fill under
+            # it — the ordinary paper check is the honest one there.
+            if grounds and isinstance(it, (Point, MathLabel)) \
+                    and not getattr(it, "halo", False):
                 over = containing_fill(rendered_pos(it))
             if over is not None:
                 # Measured against the actual ground, not the paper.

@@ -104,7 +104,8 @@ def build(g):
         s.add(Curve(ray, role=Role.CONTENT, width_scale=0.8, color=ray_color(i, len(g["rays"]))))
     s.add(AngleMark((0, 0), (1, 0), (np.cos(g["th_max"]), np.sin(g["th_max"])), radius=0.17))
     s.add(MathLabel(r"\theta", (0.255 * np.cos(g["th_max"] / 2), 0.255 * np.sin(g["th_max"] / 2)),
-                    ha="left", va="center", size_pt=10, role=Role.ANNOTATION))
+                    ha="left", va="center", size_pt=10, role=Role.ANNOTATION,
+                    offset_px=(0, 30)))
     s.add(Point((1.0, 0.0), role=Role.CONTENT, radius_scale=0.7))
     s.add(MathLabel(r"1", (1.0, 0.0), ha="center", va="top", offset_px=(0, 8)))
     s.add(MathLabel(r"r", (R, 0.0), ha="center", va="top", offset_px=(6, 8)))

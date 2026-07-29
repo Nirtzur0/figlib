@@ -93,10 +93,10 @@ def build(g):
     m2 = ((z0.real + 1) / 2, z0.imag / 2)
     s.add(MathLabel(r"r_1", m1, ha="center", va="bottom", offset_px=(-4, -5),
                     size_pt=10, role=Role.ANNOTATION))
-    s.add(MathLabel(r"r_2", m2, ha="left", va="bottom", offset_px=(5, -4),
+    s.add(MathLabel(r"r_2", m2, ha="left", va="bottom", offset_px=(5, -38),
                     size_pt=10, role=Role.ANNOTATION))
     s.add(MathLabel(r"r_1 r_2 = k^2", (-2.15, 1.42), ha="left", va="center",
-                    role=Role.ANNOTATION))
+                    role=Role.ANNOTATION, halo=True))
     s.add(MathLabel(r"(\text{each curve its own } k)", (-2.15, 1.42), ha="left", va="top",
                     offset_px=(0, 14), size_pt=9, role=Role.ANNOTATION))
     d1 = (z0.real + 1, z0.imag)
@@ -108,7 +108,8 @@ def build(g):
     s.add(AngleMark((1.0, 0.0), (1.0, 0.0), d2, radius=0.22))
     a2 = np.arctan2(d2[1], d2[0])
     s.add(MathLabel(r"\theta_2", (1.0 + 0.30 * np.cos(a2 / 2), 0.30 * np.sin(a2 / 2)),
-                    ha="left", va="center", size_pt=9, role=Role.ANNOTATION))
+                    ha="left", va="center", size_pt=9, role=Role.ANNOTATION,
+                    halo=True))
 
     # --- mapping arrow ---
     s.add(Vector((1.95, 1.62), (2.7, 1.62), role=Role.ANNOTATION))
@@ -130,22 +131,25 @@ def build(g):
     s.add(Point((W, 0.0), role=Role.CONTENT, radius_scale=0.7))
     s.add(MathLabel(r"0", (W, 0.0), ha="right", va="top", offset_px=(-5, 9)))
     s.add(MathLabel(r"\text{foci} \mapsto \text{center}", (W + 1.0, 0.0), ha="center", va="top",
-                    offset_px=(0, 26), size_pt=9, role=Role.ANNOTATION))
+                    offset_px=(0, 26), size_pt=9, role=Role.ANNOTATION,
+                    halo=True))
     w0 = z0 * z0
     s.add(Point((W + w0.real, w0.imag), role=Role.CONTENT, radius_scale=0.8))
     s.add(MathLabel(r"w = z^2", (W + w0.real, w0.imag), ha="left", va="bottom",
-                    offset_px=(6, -5)))
+                    offset_px=(6, -5), halo=True))
     # w - 1 = (z-1)(z+1): length r1 r2 = k^2, angle theta1 + theta2
     s.add(Curve(np.array([[W + 1.0, 0.0], [W + w0.real, w0.imag]]),
                 role=Role.CONSTRUCTION, width_scale=0.9))
     mw = ((1.0 + w0.real) / 2, w0.imag / 2)
     s.add(MathLabel(r"r_1 r_2 = k^2", (W + mw[0], mw[1]), ha="center", va="bottom",
-                    offset_px=(14, -6), size_pt=10, role=Role.ANNOTATION))
+                    offset_px=(14, -6), size_pt=10, role=Role.ANNOTATION,
+                    halo=True))
     dw = (w0.real - 1.0, w0.imag)
     s.add(AngleMark((W + 1.0, 0.0), (1.0, 0.0), dw, radius=0.30))
     aw = np.arctan2(dw[1], dw[0])
     s.add(MathLabel(r"\theta_1 + \theta_2", (W + 1.0 + 0.42 * np.cos(aw / 2), 0.42 * np.sin(aw / 2)),
-                    ha="left", va="center", size_pt=9, role=Role.ANNOTATION))
+                    ha="left", va="center", size_pt=9, role=Role.ANNOTATION,
+                    halo=True))
 
     return s
 

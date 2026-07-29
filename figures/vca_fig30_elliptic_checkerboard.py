@@ -13,6 +13,12 @@ Needham's figure is reproduced up to a 180-degree rotation: with F fixed
 as above, m = e^{i pi/3} turns counterclockwise about xi+ (right pole),
 clockwise about xi- and downward through the central band -- the book's
 (unlabeled) picture is the same flow with the poles swapped.
+
+Layout choice (recorded): the book tilts its axis ~8 degrees as a
+genericity cue; this recreation keeps the fixed points on the real axis.
+The assertions are on the computed configuration either way, and the
+axis-aligned frame is what lets the pi/3 angle arc be read against the
+drawn real axis directly. Stated in the readback/judge records.
 """
 
 import numpy as np
@@ -20,7 +26,7 @@ import numpy as np
 from figlib.builders import mapped_grid
 from figlib.format import WIDE
 from figlib.gates import Checks
-from figlib.scene import Curve, FilledCurve, MathLabel, Scene
+from figlib.scene import AngleMark, Callout, Curve, FilledCurve, MathLabel, Scene
 from figlib.style import Role
 from figlib.theme import RISO
 
@@ -47,9 +53,38 @@ PARAMS = {
     "orbit_i": 4,               # radial band [-3D, -2D] around xi+
     "orbit_js": [11, 1, 3, 5, 7, 9],   # phi steps of pi/3: one M-orbit
     "grey_parity": 1,           # (i + j) % 2 of the washed cells
+    # iteration indices M^k, k = 0..5, one per orbit cell in orbit_js
+    # order: (x, y, size_pt, on_dark). 0, 1, 5 sit inside their (large)
+    # cells; 2 sits just outside its cell's outer edge; 3, 4 flank their
+    # radially-compressed cells on the lens side. Pinned: position IS
+    # meaning. Per-label style split: a numeral ON a black cell is set in
+    # paper ink, no halo (its ground is the fill, and a paper halo would
+    # punch a hole in the cell); a numeral BESIDE its cell keeps
+    # annotation ink with a halo against the net's curves.
+    "orbit_labels": [
+        (1.67, -0.28, 9.5, True),   # 0  inside cell (phi 330..360)
+        (1.33,  0.55, 9.5, True),   # 1  inside cell (phi 30..60)
+        (0.80,  0.86, 9.0, False),  # 2  beside cell (phi 90..120), outward
+        (0.38,  0.15, 8.5, False),  # 3  beside cell (phi 150..180), lens
+        (0.38, -0.15, 8.5, False),  # 4  beside cell (phi 180..210), lens
+        (0.99, -0.56, 9.5, True),   # 5  inside cell (phi 270..300)
+    ],
+    # pi/3 angle arc at xi+: spans exactly one advance step = two angular
+    # cells, from the drawn real axis (phi = 0) to the tangent of the
+    # phi = 2D net curve at the pole
+    "arc_r": 0.30,
+    "arc_ray_len": 0.42,
+    "arc_label": (1.68, 0.26),
+    # fixed-point callouts: boxes centred in the conformal cell
+    # (s, phi) in [D,2D] x [10D,11D] off xi+ (and its 180-degree twin off
+    # xi-) -- the one big grey cell near each pole that no C1/C2 curve or
+    # arrowhead enters; leaders thread the paper corridor between orbit
+    # cells 5 and 0 (and its twin)
+    "callouts": [(r"\xi_+", (1.60, -1.42), (1.0, 0.0)),
+                 (r"\xi_-", (-1.60, 1.42), (-1.0, 0.0))],
     # motion arrows: (s/D, phi0/D, phi1/D, width_scale, arrow_scale),
     # always sampled with INCREASING phi, so direction = the flow of m.
-    # Each entry's 180-degree twin is (-s, [12 - phi1, 12 - phi0]).
+    # A point's 180-degree twin is (-s, [12 - phi1, 12 - phi0]).
     "arrows": [
         # far field: the flow climbs both outer edges and descends the middle
         (-0.9, 11.85, 12.6, 2.0, 1.30),  # far right, rising quarter-sweep
@@ -61,28 +96,31 @@ PARAMS = {
         ( 1.5, 10.4, 11.2, 1.5, 1.00),   # below xi-, leftward (twin)
         (-1.5, 10.4, 11.2, 1.5, 1.00),   # below xi+, rightward
         ( 1.5,  0.8,  1.6, 1.5, 1.00),   # above xi-, rightward (twin)
-        # the orbit band: an arrow in each cell BETWEEN the black cells,
-        # so the chain reads as motion
-        (-2.5,  0.25, 0.80, 1.1, 0.75),
+        # the orbit band: arrows between black cells on the FAR side only —
+        # the near-side (phi ~ pi) members are radially compressed and must
+        # stay uncovered so the orbit chain stays countable. The slot at
+        # phi in [0.25, 0.80] is ceded to the pi/3 angle mark: an arrow
+        # there tips into the arc label, and the arc itself already gives
+        # the sense of advance across that gap.
         (-2.5,  2.25, 2.80, 1.1, 0.75),
-        (-2.5,  4.25, 4.80, 1.1, 0.75),
-        (-2.5,  6.25, 6.80, 1.1, 0.75),
         (-2.5,  8.25, 8.80, 1.1, 0.75),
         (-2.5, 10.25, 10.80, 1.1, 0.75),
-        # the central lens: columns of down-arrows between the poles
+        # the central lens: ONE column of down-arrows either side of the
+        # midline (was four columns: read as a translation field)
         ( 0.5,  3.6,  4.6, 1.1, 0.72),
         ( 0.5,  7.4,  8.4, 1.1, 0.72),
         (-0.5,  3.6,  4.6, 1.1, 0.72),
         (-0.5,  7.4,  8.4, 1.1, 0.72),
-        ( 1.5,  4.2,  5.2, 1.1, 0.72),
-        ( 1.5,  6.8,  7.8, 1.1, 0.72),
-        (-1.5,  4.2,  5.2, 1.1, 0.72),
-        (-1.5,  6.8,  7.8, 1.1, 0.72),
         # innermost legible ring at each pole
         (-3.5,  2.6,  3.6, 1.0, 0.62),
         (-3.5,  8.6,  9.6, 1.0, 0.62),
         ( 3.5,  8.4,  9.4, 1.0, 0.62),
         ( 3.5,  2.4,  3.4, 1.0, 0.62),
+        # xi- collar band (twin ring of the orbit band): counter-circulation
+        # documented with the same density as the xi+ side
+        ( 2.5, 11.20, 11.75, 1.0, 0.70),
+        ( 2.5,  9.20,  9.75, 1.0, 0.70),
+        ( 2.5,  1.20,  1.75, 1.0, 0.70),
     ],
 }
 
@@ -185,8 +223,17 @@ def compute(p):
         z = zmap(s * D + 1j * phi)
         arrows.append((np.column_stack([z.real, z.imag]), wsc, asc))
 
+    # angle-arc directions from the net itself: tangents at xi+ of the two
+    # C1 curves bounding one advance step (phi = 0 and phi = 2D = arg m)
+    t0 = zmap(-9.0 + 0.0j) - 1.0
+    t1 = zmap(-9.0 + 1j * (2 * D)) - 1.0
+    arc_dirs = (t0 / abs(t0), t1 / abs(t1))
+
     return {"u": u, "v": v, "c2": c2, "c1": c1, "grey": grey,
             "orbit": orbit, "arrows": arrows, "m": p["m"],
+            "orbit_labels": p["orbit_labels"], "arc_dirs": arc_dirs,
+            "arc_r": p["arc_r"], "arc_ray_len": p["arc_ray_len"],
+            "arc_label": p["arc_label"], "callouts": p["callouts"],
             "xlim": p["xlim"], "ylim": p["ylim"], "corner_r": p["corner_r"]}
 
 
@@ -203,16 +250,43 @@ def build(g):
     for poly in g["orbit"]:
         s.add(FilledCurve(poly, color=ink, opacity=0.95, outline=False))
 
+    # the invariant (Apollonian) family carries the flow: heavier ink than
+    # the C1 family, so the two pencils are told apart without the arrows
     for _, run in g["c2"]:
-        s.add(Curve(run, role=Role.CONTENT, width_scale=0.5))
+        s.add(Curve(run, role=Role.CONTENT, width_scale=0.72))
     for run in g["c1"]:
-        s.add(Curve(run, role=Role.CONTENT, width_scale=0.5))
+        s.add(Curve(run, role=Role.CONTENT, width_scale=0.45))
 
     for pts, wsc, asc in g["arrows"]:
         s.add(Curve(pts, role=Role.CONTENT, width_scale=wsc,
                     arrows=(1.0,), arrow_scale=asc))
 
     s.add(Curve(frame, closed=True, role=Role.FRAME))
+
+    # iteration indices: the black cells ARE one orbit, counted 0..5.
+    # Style split per label: paper ink on the black cells (ground = fill),
+    # haloed annotation ink beside them (ground = paper under curve ink).
+    paper = THEME.paper[0]
+    for k, (lx, ly, pt, on_dark) in enumerate(g["orbit_labels"]):
+        s.add(MathLabel(str(k), (lx, ly), role=Role.ANNOTATION,
+                        color=paper if on_dark else None,
+                        ha="center", va="center", size_pt=pt,
+                        halo=not on_dark, pin=True))
+
+    # pi/3 arc at xi+: one advance step, read against the drawn real axis
+    d1, d2 = g["arc_dirs"]
+    ray = np.array([[1.0, 0.0],
+                    [1.0 + g["arc_ray_len"] * d2.real,
+                     g["arc_ray_len"] * d2.imag]])
+    s.add(Curve(ray, role=Role.ANNOTATION, width_scale=0.9))
+    s.add(AngleMark((1.0, 0.0), (d1.real, d1.imag), (d2.real, d2.imag),
+                    radius=g["arc_r"]))
+    s.add(MathLabel(r"\pi/3", g["arc_label"], role=Role.ANNOTATION,
+                    ha="center", va="center", size_pt=9.5,
+                    halo=True, pin=True))
+
+    for latex, anchor, target in g["callouts"]:
+        s.add(Callout(latex, anchor, target))
 
     # title card (paper plate, dotted frame outline) and haloed pole labels
     plate = _rounded_rect(x0 + 0.16, x0 + 1.92, y1 - 0.86, y1 - 0.14, 0.08)
@@ -223,10 +297,6 @@ def build(g):
     s.add(MathLabel(r"m = e^{i\pi/3},\;\; M^6 = \mathrm{id}",
                     (x0 + 0.31, y1 - 0.26), ha="left", va="top",
                     offset_px=(0, 26), size_pt=10.5, role=Role.ANNOTATION))
-    s.add(MathLabel(r"\xi_+", (1.12, -0.16), ha="left", va="top",
-                    offset_px=(2, 2), halo=True))
-    s.add(MathLabel(r"\xi_-", (-1.12, -0.16), ha="right", va="top",
-                    offset_px=(-2, 2), halo=True))
     return s
 
 
@@ -267,5 +337,15 @@ def assertions(g):
     for _ in range(6):
         zk = mobius(zk, m)
     c.check(np.max(np.abs(zk - z)) < 1e-9, "M^6 is not the identity")
+
+    # (5) the drawn angle arc spans exactly the orbit-advance angle: its
+    # bounding directions are net tangents at xi+, and the angle between
+    # them is arg m = two angular cells of the grid
+    d1, d2 = g["arc_dirs"]
+    span = float(np.angle(d2 / d1))
+    c.check(abs(span - np.angle(m)) < 1e-3,
+            f"angle arc spans {span:.4f}, not arg m = {np.angle(m):.4f}")
+    c.check(abs(span - 2 * D) < 1e-3,
+            "angle arc does not span two angular cells of the net")
 
     c.done()

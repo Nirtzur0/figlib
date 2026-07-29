@@ -135,7 +135,7 @@ def build(g):
 
     s.add(Point((0.0, p["x0"]), role=Role.CONTENT, radius_scale=1.1))
     s.add(MathLabel(r"x_0", (0.07, p["x0"]), ha="left", va="bottom",
-                    offset_px=(2, -4), size_pt=10))
+                    offset_px=(-25, -4), size_pt=10))
 
     s.add(MathLabel(r"dX_t = -\theta X_t\,dt + \sigma\,dW_t",
                     (2.62, 2.55), ha="center", va="center", size_pt=11,

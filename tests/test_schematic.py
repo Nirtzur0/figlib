@@ -264,6 +264,127 @@ class TestAssemble:
         assert out[-1] is top
 
 
+# --- regions: grouping as a filled ground -----------------------------------
+#
+# The transformer-circuits idiom: containment is a pale filled rounded rect
+# BEHIND the nodes, and nesting is read off the contrast ladder rather than
+# off any drawn line. What can be wrong independently of taste is the
+# structure — a region must contain what it claims to contain, two regions
+# must nest or be disjoint (a half-overlap groups nothing), and the paint
+# order must put a child over its parent and both under the nodes.
+
+
+class TestRegion:
+    def test_enclose_derives_the_bbox_of_its_members_with_pad(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        b = sch.Node("b", (3.0, 1.0), 1.0, 0.6)
+
+        r = sch.enclose("g", [a, b], pad=0.2)
+
+        assert r.rect == pytest.approx((-0.7, -0.5, 3.7, 1.5))
+        assert r.members == ("a", "b")
+
+    def test_enclose_accepts_points_and_nested_regions(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        inner = sch.enclose("inner", [a], pad=0.1)
+
+        outer = sch.enclose("outer", [inner, (2.0, 2.0)], pad=0.0)
+
+        assert outer.rect == pytest.approx((-0.6, -0.4, 2.0, 2.0))
+        # a point contributes no key; only named members are checkable
+        assert outer.members == ("inner",)
+
+    def test_a_region_is_a_fill_that_edges_may_cross(self):
+        from figlib.scene import FilledCurve
+
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        r = sch.enclose("g", [a], pad=0.2)
+
+        (fill,) = [it for it in r.items() if isinstance(it, FilledCurve)]
+        assert fill.outline is False
+        assert fill.role is Role.CONSTRUCTION
+        # NOT a Node: clearance_violations must never see it, so an edge
+        # running through a group is not a collision
+        assert not isinstance(r, sch.Node)
+
+    def test_default_opacity_clears_the_colour_gate_on_both_house_themes(self):
+        """The circuits corpus washes its groups at ~1.03:1, which the house
+        floor forbids on textured paper. The default is pinned to the floor
+        instead, and this is the test that keeps it there."""
+        from figlib.color import composite, contrast
+        from figlib.gates import MIN_PERCEPTIBLE_CONTRAST
+        from figlib.style import DEFAULT_STYLE
+        from figlib.theme import RISO
+
+        for th in (RISO, DEFAULT_STYLE):
+            papers = (th.paper_stops() if hasattr(th, "paper_stops")
+                      else [th.background])
+            ink = th.ink(Role.CONSTRUCTION).color
+            worst = min(contrast(composite(ink, sch.REGION_OPACITY, p), p)
+                        for p in papers)
+            assert worst >= MIN_PERCEPTIBLE_CONTRAST
+
+    def test_containment_violation_names_the_member_that_escaped(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        b = sch.Node("b", (3.0, 0.0), 1.0, 0.6)
+        r = sch.enclose("g", [a], pad=0.2)
+        r = sch.Region(r.key, r.center, r.width, r.height, members=("a", "b"))
+
+        bad = sch.region_containment_violations([r], [a, b])
+
+        assert len(bad) == 1 and "'b'" in bad[0] and "'g'" in bad[0]
+
+    def test_a_fully_contained_member_is_clean(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        r = sch.enclose("g", [a], pad=0.2)
+
+        assert sch.region_containment_violations([r], [a]) == []
+
+    def test_partially_overlapping_regions_are_a_violation(self):
+        a = sch.Region("a", (0.0, 0.0), 2.0, 2.0)
+        b = sch.Region("b", (1.0, 1.0), 2.0, 2.0)
+
+        bad = sch.region_nesting_violations([a, b])
+
+        assert len(bad) == 1 and "'a'" in bad[0] and "'b'" in bad[0]
+
+    def test_nested_and_disjoint_regions_are_both_clean(self):
+        outer = sch.Region("outer", (0.0, 0.0), 4.0, 4.0)
+        inner = sch.Region("inner", (0.5, 0.5), 1.0, 1.0)
+        far = sch.Region("far", (10.0, 0.0), 2.0, 2.0)
+
+        assert sch.region_nesting_violations([outer, inner, far]) == []
+
+    def test_assemble_paints_regions_under_edges_child_over_parent(self):
+        from figlib.scene import Curve, FilledCurve
+
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6, fill="#ffffff")
+        b = sch.Node("b", (3.0, 0.0), 1.0, 0.6, fill="#ffffff")
+        e = sch.connect(a, b, "map")
+        inner = sch.enclose("inner", [a], pad=0.2)
+        outer = sch.enclose("outer", [a, b], pad=0.5)
+
+        # deliberately passed smallest-first: draw order is derived, not given
+        out = sch.assemble([a, b], [e], regions=[inner, outer])
+
+        fills = [i for i, it in enumerate(out) if isinstance(it, FilledCurve)]
+        i_outer, i_inner = fills[0], fills[1]
+        i_edge = next(i for i, it in enumerate(out) if isinstance(it, Curve))
+        i_box = fills[2]
+        assert i_outer < i_inner < i_edge < i_box
+
+    def test_a_region_label_sits_inside_its_own_top_edge(self):
+        from figlib.scene import MathLabel
+
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        r = sch.enclose("g", [a], pad=0.3, label=r"\text{group}")
+
+        (lab,) = [it for it in r.items() if isinstance(it, MathLabel)]
+        x0, y0, x1, y1 = r.rect
+        assert lab.anchor == pytest.approx((0.0, y1))
+        assert lab.va == "top" and lab.role is Role.ANNOTATION
+
+
 # --- the benchmark figure ---------------------------------------------------
 
 

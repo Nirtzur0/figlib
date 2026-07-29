@@ -113,38 +113,25 @@ def point_at(pts: np.ndarray, t: float) -> XY:
 # --- nodes ------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class Node:
-    """A box at an explicit position and size, with a centered label.
+class _Box:
+    """Rect geometry shared by every axis-aligned box: `Node` and `Region`.
 
-    Size is a stated number, never a growing box: a `Node` that resized
-    itself would hide overflow instead of reporting it. `auto_node` will
-    COMPUTE that number from the label's typeset metrics if the program
-    asks, but the value still lands in this field and `label_overflow`
-    still checks it. The mechanical gate catches label collisions.
-
-    `fill` is a paper colour (`THEME.background` / `THEME.paper[0]`), which
-    is what lets rails and edges pass cleanly BEHIND a node.
+    Both are a center plus a width, a height and a corner radius, and both
+    need the same ports, containment and boundary distance. What separates
+    them is what they MEAN — a `Node` is a thing in the graph and an edge
+    that enters one it is not attached to is a collision; a `Region` is a
+    ground and edges cross it freely — so they stay distinct types and only
+    the geometry is shared.
     """
 
-    key: str
     center: XY
     width: float
     height: float
-    label: str | None = None
-    role: Role = Role.CONTENT
-    corner: float | None = None        # radius in math units; None -> 0.22*min(w,h)
-    fill: str | None = None            # paper colour, or None for an open box
-    label_role: Role | None = None     # None -> the node's own role
-    label_size_pt: float | None = None
-    label_offset_px: XY = (0.0, 0.0)
-    width_scale: float = 1.0
-    n_arc: int = 6
+    n_arc: int
 
     @property
     def radius(self) -> float:
-        r = self.corner if self.corner is not None else 0.22 * min(self.width, self.height)
-        return float(min(max(r, 0.0), 0.5 * min(self.width, self.height)))
+        raise NotImplementedError
 
     @property
     def rect(self) -> tuple[float, float, float, float]:
@@ -176,7 +163,7 @@ class Node:
         return (x0 - pad <= px <= x1 + pad) and (y0 - pad <= py <= y1 + pad)
 
     def boundary_distance(self, p) -> float:
-        """Unsigned distance from p to the node's RECT boundary.
+        """Unsigned distance from p to the box's RECT boundary.
 
         The rect, not the rounded outline: rounding is cosmetic, and a port
         near a corner would otherwise read as detached from its own box.
@@ -188,6 +175,40 @@ class Node:
         if ox > 0.0 or oy > 0.0:
             return float(np.hypot(ox, oy))
         return float(min(px - x0, x1 - px, py - y0, y1 - py))
+
+
+@dataclass(frozen=True)
+class Node(_Box):
+    """A box at an explicit position and size, with a centered label.
+
+    Size is a stated number, never a growing box: a `Node` that resized
+    itself would hide overflow instead of reporting it. `auto_node` will
+    COMPUTE that number from the label's typeset metrics if the program
+    asks, but the value still lands in this field and `label_overflow`
+    still checks it. The mechanical gate catches label collisions.
+
+    `fill` is a paper colour (`THEME.background` / `THEME.paper[0]`), which
+    is what lets rails and edges pass cleanly BEHIND a node.
+    """
+
+    key: str
+    center: XY
+    width: float
+    height: float
+    label: str | None = None
+    role: Role = Role.CONTENT
+    corner: float | None = None        # radius in math units; None -> 0.22*min(w,h)
+    fill: str | None = None            # paper colour, or None for an open box
+    label_role: Role | None = None     # None -> the node's own role
+    label_size_pt: float | None = None
+    label_offset_px: XY = (0.0, 0.0)
+    width_scale: float = 1.0
+    n_arc: int = 6
+
+    @property
+    def radius(self) -> float:
+        r = self.corner if self.corner is not None else 0.22 * min(self.width, self.height)
+        return float(min(max(r, 0.0), 0.5 * min(self.width, self.height)))
 
     def items(self) -> list[Item]:
         out: list[Item] = []
@@ -205,6 +226,112 @@ class Node:
                                  size_pt=self.label_size_pt,
                                  offset_px=self.label_offset_px))
         return out
+
+
+# --- regions: grouping as a ground, not a line ------------------------------
+#
+# The transformer-circuits idiom. A group of nodes gets a pale filled
+# rounded rect BEHIND it, and nesting is read off a contrast ladder —
+# paper, then region, then node fill — with no line drawn anywhere. It is
+# the cheapest grouping channel there is: it costs no ink the reader has to
+# decode, and it composes, because a region inside a region is just a
+# second step up the ladder.
+#
+# The corpus washes its groups at about 1.03:1 against white. The house
+# floor for a fill is MIN_PERCEPTIBLE_CONTRAST (1.3:1), and on paper with a
+# grain texture that floor is right and the corpus value would vanish, so
+# REGION_OPACITY is pinned AT the floor rather than at the reference. A
+# region that wants to be fainter has to carry an outline instead, which is
+# a different (and louder) grouping channel — the colour gate exempts an
+# outlined fill because the line, not the wash, is then doing the work.
+REGION_OPACITY = 0.28
+
+
+@dataclass(frozen=True)
+class Region(_Box):
+    """A filled ground behind a group of nodes. NOT a `Node`.
+
+    The distinction is the whole point: `clearance_violations` treats an
+    edge entering an unattached `Node` as a collision, and a region is the
+    one box an edge is SUPPOSED to run through. Keeping them separate types
+    means neither check has to special-case the other.
+
+    Members are named explicitly (`enclose` records them) so that
+    "this group contains these nodes" is a claim the program makes and
+    `region_containment_violations` can refute. A derived bbox that always
+    fit would check nothing.
+    """
+
+    key: str
+    center: XY
+    width: float
+    height: float
+    members: tuple[str, ...] = ()
+    label: str | None = None
+    role: Role = Role.CONSTRUCTION     # background structure, per the grammar
+    corner: float | None = None        # None -> 0.10*min(w,h): softer than a Node
+    fill: str | None = None            # None -> the role's ink at `opacity`
+    opacity: float = REGION_OPACITY
+    stroked: bool = False              # a drawn border instead of a bare wash
+    label_role: Role = Role.ANNOTATION
+    label_size_pt: float | None = None
+    label_ha: str = "center"
+    label_va: str = "top"              # a group title, inside its own top edge
+    label_offset_px: XY = (0.0, 12.0)  # canvas px, +y DOWN
+    n_arc: int = 6
+
+    @property
+    def radius(self) -> float:
+        r = self.corner if self.corner is not None else 0.10 * min(self.width, self.height)
+        return float(min(max(r, 0.0), 0.5 * min(self.width, self.height)))
+
+    @property
+    def area(self) -> float:
+        return float(abs(self.width) * abs(self.height))
+
+    def items(self) -> list[Item]:
+        out: list[Item] = [FilledCurve(self.outline(), role=self.role,
+                                       color=self.fill, opacity=self.opacity,
+                                       outline=self.stroked)]
+        if self.label:
+            x0, y0, x1, y1 = self.rect
+            cx = {"left": x0, "center": 0.5 * (x0 + x1), "right": x1}[self.label_ha]
+            out.append(MathLabel(self.label, (cx, y1 if self.label_va == "top" else y0),
+                                 role=self.label_role, ha=self.label_ha,
+                                 va=self.label_va, size_pt=self.label_size_pt,
+                                 offset_px=self.label_offset_px))
+        return out
+
+
+def bbox(objs: Sequence, pad: float = 0.0) -> tuple[float, float, float, float]:
+    """(x0, y0, x1, y1) enclosing Nodes, Regions and raw points, plus pad."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for o in objs:
+        if isinstance(o, _Box):
+            x0, y0, x1, y1 = o.rect
+            xs += [x0, x1]
+            ys += [y0, y1]
+        else:
+            p = _as_xy(o)
+            xs += [float(p[0])]
+            ys += [float(p[1])]
+    if not xs:
+        raise ValueError("bbox of nothing")
+    return (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad)
+
+
+def enclose(key: str, members: Sequence, pad: float = 0.0, **kw) -> Region:
+    """A `Region` sized to its members' bbox, recording their keys.
+
+    Members may be Nodes, Regions or bare points; only the ones with a key
+    are recorded, because only those can be checked afterwards. `pad` is
+    the clearance in math units — the visible margin of the group.
+    """
+    x0, y0, x1, y1 = bbox(members, pad)
+    return Region(key, (0.5 * (x0 + x1), 0.5 * (y0 + y1)), x1 - x0, y1 - y0,
+                  members=tuple(m.key for m in members if isinstance(m, _Box)),
+                  **kw)
 
 
 # --- typed edges ------------------------------------------------------------
@@ -528,6 +655,62 @@ def label_overflow(nodes: Sequence[Node], scale: float, size_pt: float,
         if w + pad_px > bw or h + pad_px > bh:
             bad.append(f"{nd.key}: label {w:.0f}x{h:.0f}px in a "
                        f"{bw:.0f}x{bh:.0f}px box (pad {pad_px:.0f})")
+    return bad
+
+
+def region_containment_violations(regions: Sequence[Region],
+                                  nodes: Sequence[Node],
+                                  pad: float = 0.0) -> list[str]:
+    """Declared members whose rect is not fully inside their region.
+
+    A group that visibly clips one of its own members is a content bug in a
+    Class B figure — the reader reads membership off the fill, so a box half
+    outside says the wrong thing about the mechanism.
+    """
+    by_key = {nd.key: nd for nd in nodes}
+    bad: list[str] = []
+    for r in regions:
+        rx0, ry0, rx1, ry1 = r.rect
+        for k in r.members:
+            nd = by_key.get(k)
+            if nd is None:
+                bad.append(f"region {r.key!r} claims member {k!r}, which is "
+                           f"not among the nodes")
+                continue
+            x0, y0, x1, y1 = nd.rect
+            if (x0 < rx0 - pad or y0 < ry0 - pad
+                    or x1 > rx1 + pad or y1 > ry1 + pad):
+                bad.append(f"member {k!r} escapes region {r.key!r}: node rect "
+                           f"{tuple(round(v, 3) for v in nd.rect)} outside "
+                           f"{tuple(round(v, 3) for v in r.rect)}")
+    return bad
+
+
+def region_nesting_violations(regions: Sequence[Region],
+                              tol: float = 1e-9) -> list[str]:
+    """Region pairs that half-overlap — neither nested nor disjoint.
+
+    Containment is only readable if the regions form a TREE. Two grounds
+    that share a corner make a third, unnamed region out of the overlap and
+    the reader has no way to know what it means; there is no honest way to
+    draw it, so it is a violation rather than a style note.
+    """
+    bad: list[str] = []
+    for i in range(len(regions)):
+        for j in range(i + 1, len(regions)):
+            a, b = regions[i], regions[j]
+            ax0, ay0, ax1, ay1 = a.rect
+            bx0, by0, bx1, by1 = b.rect
+            if (ax1 <= bx0 + tol or bx1 <= ax0 + tol
+                    or ay1 <= by0 + tol or by1 <= ay0 + tol):
+                continue                                   # disjoint
+            a_in_b = (bx0 - tol <= ax0 and ax1 <= bx1 + tol
+                      and by0 - tol <= ay0 and ay1 <= by1 + tol)
+            b_in_a = (ax0 - tol <= bx0 and bx1 <= ax1 + tol
+                      and ay0 - tol <= by0 and by1 <= ay1 + tol)
+            if not (a_in_b or b_in_a):
+                bad.append(f"regions {a.key!r} and {b.key!r} half-overlap — "
+                           f"grouping grounds must nest or be disjoint")
     return bad
 
 
@@ -972,6 +1155,7 @@ def circle_node(key: str, center: XY, radius: float, label: str | None = None,
 
 
 def assemble(nodes: Sequence[Node], edges: Sequence[Edge], *,
+             regions: Sequence[Region] = (),
              under: Sequence = (), over: Sequence = ()) -> list[Item]:
     """nodes + edges -> scene items, in the one draw order that reads.
 
@@ -982,8 +1166,16 @@ def assemble(nodes: Sequence[Node], edges: Sequence[Edge], *,
     masked by a box downstream of it is the one failure this ordering would
     otherwise introduce. `under` (rails, background) and `over` (titles)
     bracket the whole thing.
+
+    `regions` paint first, largest area first, so a nested region lands on
+    top of its parent and the contrast ladder comes out right whatever order
+    the program listed them in. Draw order is DERIVED from the geometry
+    here, unlike everywhere else in this module, because the alternative is
+    a hand-maintained depth integer that silently disagrees with the rects.
     """
     out: list[Item] = list(items(under))
+    for r in sorted(regions, key=lambda r: -r.area):
+        out.extend(r.items())
     edge_items = [it for e in edges for it in e.items()]
     out += [it for it in edge_items if not isinstance(it, MathLabel)]
     out += items(nodes)

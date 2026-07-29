@@ -167,6 +167,64 @@ that, each general (a profile/callable, never a device):
   channel that breaks the density–legibility tradeoff: annotation load
   can rise without clarity falling.
 
+## Containment and elision (from the transformer-circuits schematic corpus)
+
+Read off the 2025 attention-QK figures. The organizing idea is not a
+palette: **their schematics are never free-floating box-and-arrow graphs.
+Every one is embedded in a coordinate system that means something** — x is
+context position, anchored to a literal monospace strip of the prompt at
+the page foot, y is depth. Layout is not chosen, it is determined, and the
+reader gets two real axes before reading a label. `induction_head_circuit`
+already works this way; `schematic_transformer_block` did not.
+
+**Region (landed).** Grouping as a filled ground behind the nodes, with
+nesting read off a contrast ladder and no line drawn. Deliberately NOT a
+`Node`: an edge entering an unattached Node is a collision, and a region is
+the one box edges are supposed to cross, so they stay distinct types and
+neither check special-cases the other. Members are named, not inferred — a
+derived bbox that always fits would check nothing — which buys two
+structural gates: `region_containment_violations` (a group that clips its
+own member is a content bug) and `region_nesting_violations` (grounds must
+form a tree; a half-overlap makes a third unnamed region out of the
+intersection and there is no honest way to draw it).
+
+*The finding that cost the most to learn:* the corpus washes its grounds at
+about **1.03:1**, and that value is unavailable here. The house fill floor
+is `MIN_PERCEPTIBLE_CONTRAST` (1.3:1), and clearing it is a statement about
+luminance alone — no hue escapes it, every compliant fill lands near L 0.70
+— so over an area the size of a sublayer the ground becomes the heaviest
+ink on the page (measured: 59%). The corpus gets away with it on pure white
+under a controlled rasterizer; on grained paper 1.03:1 is nothing. The
+resolution is the gate's own exemption: an *outlined* fill is exempt,
+because the border is then the mark carrying the contrast. So a house
+grouping ground is a CONSTRUCTION-dashed border over a sub-floor wash —
+louder than the corpus, and honest about why. **Large-area fills and stroke
+floors are in genuine tension; the floor is right and the area is the thing
+to spend carefully.**
+
+**Still missing, in payoff order.** All three are *honesty devices
+implemented as marks*, which is the corpus's real lesson: where our figures
+admit an elision in the module docstring, theirs admit it on the page.
+
+1. **Set/elision mark** — the stacked-card shadow meaning "this node is
+   many things abbreviated to one". `Multi-Head Attention` is exactly this
+   lie and currently only line 53 of its docstring says so.
+2. **Declared truncation** — the diamond terminator and the arrow into
+   `…`: this continues and I am choosing to stop. Cutting gets drawn.
+3. **Unknown-mechanism node** — a box literally labelled `???`.
+   Uncertainty as a node, not a caption hedge.
+
+Two smaller ones, both cheap: a **labelled operator junction** (their K/Q
+glyph is a named binary operator sitting ON an edge with its argument roles
+annotated — generalizes the circled `+`, which is role-blind), and a
+**mono/sans register split** where typeface encodes epistemic status
+(monospace = literal model input, sans = human interpretation). The
+register channel is free for us; every figure is currently all-serif-math.
+
+`Role.MUTED` already covers their off-focus channel — same geometry,
+desaturated, for "same object, not the subject" (`induction_head_circuit`
+uses it for the non-accented ensemble).
+
 ## Build order
 
 1. Curve markers + line-style channel + open-arrow flag (one sitting;

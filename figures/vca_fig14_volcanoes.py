@@ -119,7 +119,7 @@ def build(g):
 
     # the convergence circle, labeled where it crosses the front
     s.add(label3(r"|z| = 1", (0.72, -0.72, 0.75), cam, ha="left", va="top",
-                 offset_px=(16, 20), role=Role.ACCENT1))
+                 offset_px=(16, 20), role=Role.ACCENT1, halo=True))
     # name the surface and admit the truncation
     s.add(label3(r"\left|\tfrac{1}{1+z^2}\right|", (-2.0, 0.9, 0.55), cam,
                  ha="right", va="center", offset_px=(-78, -46), role=Role.ANNOTATION))

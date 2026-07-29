@@ -74,17 +74,20 @@ class TestLabelOnInk:
         assert lab.offset_px == (0.0, 0.0)
         assert "label-on-ink" in _kinds(mechanical(scene, DEFAULT_STYLE))
 
-    def test_halo_inflates_the_checked_box(self):
-        # anchored just off the stroke: bare glyphs clear, the halo cuts it
-        off = 6.5 / Transform(_diagonal_scene(), width_px=900).scale
-        bare = MathLabel(r"x", (5.0 + off, 5.0 - off), ha="center", va="center")
-        scene = _diagonal_scene(bare)
+    def test_halo_declares_the_ride_and_exempts(self):
+        # halo=True is the author saying "this label rides busy ink" — the
+        # cartographic-halo idiom; the gate polices the UNMARKED case
+        haloed = self._label(halo=True)
+        scene = _diagonal_scene(haloed)
         assert "label-on-ink" not in _kinds(mechanical(scene, DEFAULT_STYLE))
-        haloed = MathLabel(r"x", (5.0 + off, 5.0 - off), ha="center",
-                           va="center", halo=True, pin=True)
-        diags = mechanical(_diagonal_scene(haloed), DEFAULT_STYLE)
+        assert autoplace(scene, DEFAULT_STYLE) == []     # not nudged either
+        assert haloed.offset_px == (0.0, 0.0)
+
+    def test_bare_label_diagnostic_offers_the_halo_route(self):
+        diags = mechanical(_diagonal_scene(self._label(pin=True)),
+                           DEFAULT_STYLE)
         hits = [d for d in diags if d.kind == "label-on-ink"]
-        assert hits and "halo" in hits[0].detail
+        assert hits and "halo=True" in hits[0].detail
 
     def test_no_free_nudge_reports_ink_free_region_in_math_coords(self):
         # a dense block of content lines: no single-axis escape within

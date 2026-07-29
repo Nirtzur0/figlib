@@ -91,7 +91,8 @@ def _panel(g, mapped: bool) -> Scene:
     # fractions chosen clear of the marked point z_0
     s.add(Curve(ray0, role=Role.ACCENT1, width_scale=1.2,
                 arrows=(0.78,) if mapped else (0.45,)))
-    s.add(Curve(circ0, role=Role.ACCENT2, width_scale=1.2, arrows=(0.28,)))
+    # 0.30: the arrow-on-mark gate found 0.28 landing on the '2\theta_0' label
+    s.add(Curve(circ0, role=Role.ACCENT2, width_scale=1.2, arrows=(0.30,)))
     s.add(Point(tuple(z0), role=Role.CONTENT, radius_scale=0.9))
     s.add(Point((1.0, 0.0), role=Role.CONTENT, radius_scale=0.7))
 

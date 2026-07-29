@@ -49,7 +49,18 @@ the layout IS the content and there is no numerics to fall back on.
    because it distinguishes one object, not two. Kind = relation: `excite`
    (filled head) where the stream carries itself forward, `map` (hollow
    head) where a sublayer transforms what it read. Boxes are paper-filled
-   so the spine and the taps pass cleanly behind them.
+   so the spine and the taps pass cleanly behind them. CONTAINMENT is the
+   fourth channel: each norm+sublayer pair sits on a grouping ground, so
+   "one sublayer" is a thing the eye gets for free rather than an inference
+   from adjacency. The transformer-circuits corpus draws that ground as a
+   bare wash at about 1.03:1 and no border. That does not survive here —
+   the house fill floor is 1.3:1, and a compliant wash over an area this
+   large stops being background and becomes the heaviest ink on the page
+   (measured: 59% of ink at REGION_OPACITY). So the ground is drawn the
+   way this theme can afford it: a CONSTRUCTION-dashed border, which the
+   colour gate exempts because the line is then the mark carrying the
+   contrast, over a wash at 0.10 that only has to be findable. Louder than
+   the corpus, and the corpus value is unavailable on grained paper.
 8. HONESTY. This is one block with multi-head attention drawn as a single
    box: heads, the QKV projections, the softmax, the MLP's inner width and
    nonlinearity, dropout, and the final LayerNorm a pre-norm stack needs
@@ -59,9 +70,12 @@ the layout IS the content and there is no numerics to fall back on.
    and that is the figure's main lie.
 9. GATES. Numerical = the structural asserts below: the drawn y-order
    agrees with the DAG's longest-path ranking (no edge runs backwards),
-   every LayerNorm is off the spine lane, the two branches are on opposite
-   sides, both adds take exactly two inputs, ports are exact, zero
-   crossings, no edge pierces a box it is not attached to.
+   NO SUBLAYER GROUND straddles the spine lane (the pre-norm claim, made
+   of the whole sublayer rather than of the norm alone — a later edit that
+   widened a box could not sneak across), each ground holds the two boxes
+   it claims and the grounds nest-or-are-disjoint, the two branches are on
+   opposite sides, both adds take exactly two inputs, ports are exact,
+   zero crossings, no edge pierces a box it is not attached to.
 """
 
 import numpy as np
@@ -110,6 +124,8 @@ PARAMS = {
     "pill_pad_px": (30.0, 24.0),  # the stream's two terminals
     "pill_min_px": (56.0, 37.1),  # matched to the branch-box height
     "add_radius_px": 22.0,
+    "region_pad_px": 16.0,     # margin of a sublayer's grouping ground
+    "region_opacity": 0.10,    # below the fill floor; the border carries it
     "clearance_px": 8.0,       # how close an edge may pass a foreign box
     "tap_frac": 0.45,          # read height, as a fraction of the rank gap
     "spine_width": 2.2,        # THE object: weight, not hue
@@ -204,6 +220,18 @@ def compute(p):
     w.label_ha, w.label_va = "center", "bottom"
     w.label_offset_px = (0.0, -9.0)
 
+    # --- the grouping ground: a sublayer is ONE thing ---------------------
+    # The norm and the thing it feeds are not two stages in a pipeline; they
+    # are one sublayer, and the pre-norm claim is about the whole of it. A
+    # wash behind the pair says that with no ink the reader has to decode,
+    # and it converts the claim from "no LayerNorm sits on the stream" into
+    # the stronger "no part of either sublayer does" — which is what
+    # assertions() now checks.
+    regions = [sch.enclose(f"group:{sub}", [nodes[ln], nodes[sub]],
+                           pad=u(p["region_pad_px"]), stroked=True,
+                           opacity=p["region_opacity"])
+               for ln, sub, _add, _side in p["branches"]]
+
     junctions = [Point(xy, role=Role.CONTENT, filled=True, radius_scale=1.15)
                  for xy in taps.values()]
 
@@ -220,13 +248,14 @@ def compute(p):
         "params": p, "scale": scale, "size_pt": size_pt, "u": u,
         "ranks": ranks, "pos": pos, "nodes": nodes, "edges": edges,
         "taps": taps, "junctions": junctions, "annotations": annotations,
-        "xlim": p["xlim"], "ylim": p["ylim"],
+        "regions": regions, "xlim": p["xlim"], "ylim": p["ylim"],
     }
 
 
 def build(g):
     s = Scene(xlim=g["xlim"], ylim=g["ylim"])
     s.add(*sch.assemble(list(g["nodes"].values()), g["edges"],
+                        regions=g["regions"],
                         over=[*g["junctions"], *g["annotations"]]))
     return s
 
@@ -251,8 +280,23 @@ def assertions(g):
                 f"{add} does not sit one rank above {sub}")
 
     # 2. PRE-NORM: no LayerNorm is on the stream. That is the claim, and it
-    #    is a statement about x, so it is checkable as one.
+    #    is a statement about x, so it is checkable as one. The grouping
+    #    ground makes it checkable of the WHOLE sublayer at once: if no part
+    #    of either region reaches the spine lane, then nothing inside one
+    #    can, whatever a later edit does to the boxes.
     x_spine = pos["in"][0]
+    regions = g["regions"]
+    for r in regions:
+        rx0, _ry0, rx1, _ry1 = r.rect
+        c.check(rx1 < x_spine or rx0 > x_spine,
+                f"sublayer ground {r.key} straddles the residual-stream "
+                f"lane at x = {x_spine} — that is post-norm")
+    escaped = sch.region_containment_violations(regions, node_list)
+    c.check(not escaped, "; ".join(escaped))
+    tangled = sch.region_nesting_violations(regions)
+    c.check(not tangled, "; ".join(tangled))
+    c.check(len(regions) == len(p["branches"]),
+            "a sublayer is missing its grouping ground")
     for ln, _sub, _add, _side in p["branches"]:
         c.check(abs(pos[ln][0] - x_spine) > nodes[ln].width / 2.0,
                 f"{ln} overlaps the residual-stream lane — that is post-norm")

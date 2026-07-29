@@ -15,10 +15,10 @@ cannot fix falls through to the gate exactly as before.
 
 from __future__ import annotations
 
-from .gates import (Corridor, LabelEntry, _corridor_free_nudges, _entry_pad,
-                    _figure_label_entries, _free_nudges, _inflate,
-                    _label_entries, _NUDGE_PAD, _overlap, _shift,
-                    corridor_hit, figure_ink_corridors, ink_corridors)
+from .gates import (Corridor, LabelEntry, _corridor_free_nudges,
+                    _figure_label_entries, _free_nudges, _label_entries,
+                    _NUDGE_PAD, _overlap, _shift, corridor_hit,
+                    figure_ink_corridors, ink_corridors)
 from .layout import Transform
 from .scene import Scene
 from .style import Style
@@ -49,13 +49,14 @@ def _clip_fix(box: Box, canvas_w: float, canvas_h: float) -> tuple[float, float]
 
 
 def _resolve_one(k: int, boxes: list, canvas_w: float, canvas_h: float,
-                 corridors: list[Corridor] = [],
-                 pad: float = 0.0) -> tuple[float, float] | None:
+                 corridors: list[Corridor] = []) -> tuple[float, float] | None:
     """The smallest verified free move for box k within budget, or None.
 
     Corridors (content-ink keep-out bands from the gate) are obstacles:
     a collision fix must not land on ink, and a label sitting on ink with
-    no collision gets its own nudge search. pad is the halo inflation."""
+    no collision gets its own nudge search. Callers pass corridors=() for
+    a haloed label — halo=True declares the ride, so ink is not an
+    obstacle for it."""
     box = boxes[k][2]
     colliding = any(_overlap(box, boxes[m][2])
                     for m in range(len(boxes)) if m != k)
@@ -63,13 +64,13 @@ def _resolve_one(k: int, boxes: list, canvas_w: float, canvas_h: float,
         for dx, dy in _free_nudges(k, boxes, canvas_w, canvas_h):
             if abs(dx) + abs(dy) > MAX_AUTO_NUDGE:
                 continue
-            if corridor_hit(_inflate(_shift(box, dx, dy), pad), corridors) is not None:
+            if corridor_hit(_shift(box, dx, dy), corridors) is not None:
                 continue
             return (dx, dy)
         return None
-    if corridors and corridor_hit(_inflate(box, pad), corridors) is not None:
+    if corridors and corridor_hit(box, corridors) is not None:
         moves = _corridor_free_nudges(k, boxes, corridors, canvas_w, canvas_h,
-                                      pad=pad, max_move=int(MAX_AUTO_NUDGE))
+                                      max_move=int(MAX_AUTO_NUDGE))
         return moves[0] if moves else None
     dx, dy = _clip_fix(box, canvas_w, canvas_h)
     if dx == 0.0 and dy == 0.0:
@@ -85,16 +86,17 @@ def _resolve_one(k: int, boxes: list, canvas_w: float, canvas_h: float,
 
 
 def _solve(entries: list[LabelEntry], canvas_w: float, canvas_h: float,
-           corridors: list[Corridor] = [], style: Style | None = None) -> list[str]:
+           corridors: list[Corridor] = []) -> list[str]:
     boxes = [box for box, _ in entries]
     notes: list[str] = []
     for _ in range(_MAX_PASSES):
         moved = False
         for k, (_, owner) in enumerate(entries):
-            if owner is None or owner.pin:
+            # non-MathLabel owners (Callouts) have no offset_px to nudge
+            if owner is None or getattr(owner, "pin", True):
                 continue
-            pad = _entry_pad(owner, style) if style is not None else 0.0
-            delta = _resolve_one(k, boxes, canvas_w, canvas_h, corridors, pad)
+            cors = [] if owner.halo else corridors
+            delta = _resolve_one(k, boxes, canvas_w, canvas_h, cors)
             if delta is None:
                 continue
             dx, dy = delta
@@ -113,7 +115,7 @@ def autoplace(scene: Scene, style: Style, width_px: float = 900) -> list[str]:
     corridors, and the canvas edge (in place); returns a note per move."""
     t = Transform(scene, width_px=width_px)
     return _solve(_label_entries(scene, style, t), t.canvas_w, t.canvas_h,
-                  corridors=ink_corridors(scene, style, t), style=style)
+                  corridors=ink_corridors(scene, style, t))
 
 
 def autoplace_figure(fig: "Figure", style: Style,
@@ -122,5 +124,4 @@ def autoplace_figure(fig: "Figure", style: Style,
     connector labels, and content-ink corridors are fixed obstacles."""
     entries, canvas_w, canvas_h = _figure_label_entries(fig, style, width_px)
     return _solve(entries, canvas_w, canvas_h,
-                  corridors=figure_ink_corridors(fig, style, width_px),
-                  style=style)
+                  corridors=figure_ink_corridors(fig, style, width_px))

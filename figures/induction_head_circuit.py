@@ -149,8 +149,6 @@ def compute(p):
         label=r"\text{QK}:\; q(" + _tt(toks[f]) + r")\cdot k(\text{prev}{=}"
               + _tt(toks[e]) + ")",
         label_anchor=(0.5 * (xs[key_pos] + xs[f]) + 0.45, y_q + 0.05),
-        # +2px: the halo was grazing the QK edge's ink corridor by 1px
-        label_offset_px=(0.0, 2.0),
         label_va="top"))
 
     edges.append(sch.edge(

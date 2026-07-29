@@ -7,6 +7,17 @@ the sheet's near edge. From N the ray through a plane point p pierces
 Sigma at the image p-hat (chord inside the sphere dashed, exterior rod
 solid). A whole line through p maps to a circle through N: as p runs
 out along the line (hollow arrows), p-hat climbs the circle into N.
+
+The line L is a secant of the unit circle: it crosses the equator at
+two points, and its image circle passes through those SAME two points
+(marked) — the equator is the projection's fixed set, argued on-figure.
+Between the crossings the image dips below the equator; that arc is
+dashed because the sheet genuinely occludes it (same exact visibility
+tests as every other hidden stroke).
+
+Dot convention: filled = marked point (N, p, p-hat, q, q-hat, the two
+fixed crossings); open + muted = landmark occluded by the sphere's body
+(O at the center, S behind the southern cap).
 """
 
 import numpy as np
@@ -26,8 +37,10 @@ CLAIM = (
     "Stereographic projection from the north pole N sends a point p of the "
     "plane outside the unit circle to the point p-hat where the ray N->p "
     "pierces the northern hemisphere of the unit sphere; the equator is the "
-    "unit circle itself, and a straight line through p maps to a circle "
-    "through N, so p -> infinity drives p-hat -> N."
+    "unit circle itself and its points are fixed — the line through p "
+    "crosses the unit circle at two points and its image circle passes "
+    "through the same two points; a straight line through p maps to a "
+    "circle through N, so p -> infinity drives p-hat -> N."
 )
 
 PARAMS = {
@@ -37,10 +50,10 @@ PARAMS = {
     "plane_rot_deg": 18.0,    # plane quad twist vs the screen axes
     "plane_s": (2.5, 1.7),    # extents along the screen-parallel edge
     "plane_t": (1.3, 1.6),    # extents along the depth edge (far, near)
-    "line_dir_deg": 200.0,    # world-xy direction of the line through p
-    "q_t": 1.6,               # second sample point q = p + q_t * dir
-    "line_arrow_ts": (-0.55, 0.7, 2.3),
-    "circle_arrow_ts": (-1.6, 3.5),
+    "line_dir_deg": 250.0,    # world-xy direction: a SECANT of the unit circle
+    "q_t": -1.8,              # second sample point q = p + q_t * dir
+    "line_arrow_ts": (-2.2, 1.5),
+    "circle_arrow_ts": (-2.6, 1.0),
     "n": 512,
 }
 
@@ -190,15 +203,24 @@ def compute(p):
     equator = circle_points(sph, np.array([0.0, 0.0, 1.0]), 0.0, n=p["n"])
     eq_runs = visibility_runs(equator, sph, cam)
 
-    # the line L through p and its image circle through N
+    # the line L through p and its image circle through N. L is a secant
+    # of the unit circle: it crosses the equator at parameters tx1 < tx2,
+    # and those two crossings are FIXED by the projection.
     psi = np.radians(p["line_dir_deg"])
     d2 = np.array([np.cos(psi), np.sin(psi)])
     t_lo, t_hi = _line_range_in_quad(P2, d2, u, v, (s0, s1), (t0, t1))
     line3 = np.array([[*(P2 + t_lo * d2), 0.0], [*(P2 + t_hi * d2), 0.0]])
     t_star = -float(P2 @ d2)                          # closest approach to O
     line_dist = float(np.linalg.norm(P2 + t_star * d2))
+    assert line_dist < 1.0, "L must cross the unit circle (secant)"
+    half = np.sqrt(1.0 - line_dist**2)
+    tx1, tx2 = t_star - half, t_star + half           # |P2 + tx*d2| = 1
+    fixed = [np.array([*(P2 + tx * d2), 0.0]) for tx in (tx1, tx2)]
     ts = t_star + 2.0 * np.tan(np.linspace(-np.pi / 2 + 0.03,
                                            np.pi / 2 - 0.03, p["n"]))
+    # the drawn polyline samples the EXACT parameters of every marked
+    # point: p-hat (t=0), q-hat, and the two fixed equator crossings
+    ts = np.union1d(ts, [0.0, p["q_t"], tx1, tx2])
     circle_img = stereo(P2[None, :] + ts[:, None] * d2[None, :])
     circle_pts = np.vstack([N, circle_img, N])        # closes through N
 
@@ -207,7 +229,7 @@ def compute(p):
     qhat = stereo(Q2)
 
     ray_p = np.array([N, P])                          # p's rod: N -> p exactly
-    ray_q = np.array([N - 0.07 * (Q - N), Q])         # q's rod pokes past N
+    ray_q = np.array([N, Q])                          # q's rod: N -> q exactly
 
     def img_stub(tv):
         q3 = stereo(P2 + tv * d2)
@@ -223,8 +245,10 @@ def compute(p):
             "far_poly": far_poly, "near_poly": near_poly,
             "near_fill": near_fill, "tangencies": tangencies,
             "cap_arc": cap_arc, "cap_chord": cap_chord,
-            "plane_uv": (u, v), "equator": equator, "eq_runs": eq_runs,
+            "plane_uv": (u, v), "plane_ext": ((s0, s1), (t0, t1)),
+            "equator": equator, "eq_runs": eq_runs,
             "line3": line3, "line_d2": d2, "line_dist": line_dist,
+            "line_trange": (t_lo, t_hi), "fixed": fixed, "tx": (tx1, tx2),
             "line_ts": ts, "circle_pts": circle_pts, "circle_img": circle_img,
             "ray_p": ray_p, "ray_q": ray_q,
             "line_stubs": line_stubs, "circle_stubs": circle_stubs,
@@ -288,11 +312,22 @@ def build(g):
                        Curve(pts2, role=Role.ACCENT1, dash="dashed",
                              width_scale=1.1, opacity=0.85)))
 
-    # the line L in the sheet and its image circle through N
-    line = [(TAG_LINE, c) for _, c in
-            occlude(g["line3"], sph, cam, hidden=None, n=g["n"],
+    # the line L in the sheet and its image circle through N. L's chord
+    # between the fixed crossings runs INSIDE the sphere: dashed, like
+    # the rays' chords (solid-through-interior would be dishonest).
+    line = [(tag if c.dash else TAG_LINE, c) for tag, c in
+            occlude(g["line3"], sph, cam, hidden="dashed", n=g["n"],
                     role=Role.CONTENT, width_scale=1.35)]
-    circle = drape(g["circle_pts"], sph, cam, hidden="dashed",
+    # the image circle's visibility: a point on the sphere is drawn solid
+    # iff it faces the camera AND sits on/above the equator — the arc the
+    # secant chord maps to dips south of the equator, where the near
+    # sheet occludes it (verified exactly in assertions()). Both tests
+    # are linear in position, so min() splits at exact crossing points.
+    _, _, toward = cam.axes()
+    signed_c = np.minimum((g["circle_pts"] - sph.center) @ toward,
+                          g["circle_pts"][:, 2])
+    circle = drape(g["circle_pts"], sph, cam, hidden="dashed", tol=0.0,
+                   depth_bias=0.04, signed=signed_c,
                    role=Role.CONTENT, width_scale=1.15)
 
     # polar axis: dashed construction, wiped by the sheet where the sheet
@@ -319,20 +354,28 @@ def build(g):
     s.items.extend(compose(floor, far, body, limb, cap, eq, circle, axis,
                            near_sheet, near, line, stubs, rays))
 
-    for q, role, r_sc in ((g["N"], Role.CONTENT, 1.0),
-                          (g["phat"], Role.ACCENT2, 1.0),
-                          (g["P"], Role.ACCENT2, 1.0),
-                          (g["qhat"], Role.ACCENT2, 0.7),
-                          (g["Q"], Role.ACCENT2, 0.7)):
-        s.add(Point(anchor(q, cam), role=role, radius_scale=r_sc))
-    # hidden points step down: open dots, like the book's white marks
+    # dot convention, two styles only: filled = marked point; open+muted
+    # = landmark occluded by the sphere's body (O inside it, S behind the
+    # southern cap). ACCENT2 marks INSIDE the body fill darken to keep
+    # the contrast floor against the tan ground.
+    ACCENT2_ON_BODY = "#b22a1b"
+    for q, role, color in ((g["N"], Role.CONTENT, None),
+                           (g["phat"], Role.ACCENT2, ACCENT2_ON_BODY),
+                           (g["P"], Role.ACCENT2, None),
+                           (g["qhat"], Role.ACCENT2, ACCENT2_ON_BODY),
+                           (g["Q"], Role.ACCENT2, None)):
+        s.add(Point(anchor(q, cam), role=role, color=color))
+    # the two fixed points: L crosses the unit circle here, and the image
+    # circle passes through the very same points
+    for E in g["fixed"]:
+        s.add(Point(anchor(E, cam), role=Role.CONTENT, radius_scale=0.8))
     s.add(Point(anchor(np.zeros(3), cam), role=Role.ANNOTATION,
                 filled=False, radius_scale=0.8))
     s.add(Point(anchor(g["S"], cam), role=Role.ANNOTATION,
-                filled=False, radius_scale=0.85))
+                filled=False, radius_scale=0.8))
 
     s.add(MathLabel(r"N", anchor(g["N"], cam), ha="center", va="bottom",
-                    offset_px=(0, -28)))
+                    offset_px=(-14, -8)))
     s.add(MathLabel(r"S", anchor(g["S"], cam), ha="center", va="top",
                     offset_px=(0, 26), role=Role.ANNOTATION))
     s.add(MathLabel(r"O", anchor(np.zeros(3), cam), ha="right", va="center",
@@ -340,30 +383,33 @@ def build(g):
     s.add(MathLabel(r"p", anchor(g["P"], cam), ha="right", va="top",
                     offset_px=(-11, 8), role=Role.ACCENT2))
     s.add(MathLabel(r"\hat{p}", anchor(g["phat"], cam), ha="left", va="bottom",
-                    offset_px=(9, -3), role=Role.ACCENT2))
-    # Sigma ON the upper-right body: a sphere point projecting to (.62, .55)
-    sig = 0.62 * cam.axes()[0] + 0.55 * cam.axes()[1]
+                    offset_px=(12, -8), role=Role.ACCENT2,
+                    color=ACCENT2_ON_BODY))
+    # Sigma ON the upper-left body (the image circle now climbs the right)
+    sig = -0.62 * cam.axes()[0] + 0.55 * cam.axes()[1]
     sig = point_on(g["sph"], sig + np.sqrt(1 - 0.62**2 - 0.55**2) * cam.axes()[2])
     s.add(MathLabel(r"\Sigma", anchor(sig, cam), ha="center", va="center"))
     u, v = g["plane_uv"]
     s.add(MathLabel(r"\mathbb{C}", anchor(-1.6 * u + 0.6 * v, cam),
                     ha="center", va="center", role=Role.ANNOTATION))
 
-    # the book sets UNIT CIRCLE in perspective along the front arc; a
-    # single rotation per word tracks the arc's local tangent (set on the
-    # right half of the arc, where the line L has fallen away)
-    a = np.radians(PARAMS["azim"])
-    for word, dth in ((r"\text{UNIT}", 0.50), (r"\text{CIRCLE}", 1.05)):
-        th = a + dth
-        pos = 1.17 * np.array([np.cos(th), np.sin(th), 0.0])
+    # the book sets UNIT CIRCLE in perspective along the front arc, on
+    # the left half where the line L has fallen away: each word rotates
+    # with the arc's local tangent, and the nearer word is set larger
+    # (size tapers with depth, so the text itself reads as in-plane)
+    label_r = 1.52
+    for word, th_deg in ((r"\text{UNIT}", -114.0), (r"\text{CIRCLE}", -92.0)):
+        th = np.radians(th_deg)
+        pos = label_r * np.array([np.cos(th), np.sin(th), 0.0])
         tan3 = np.array([-np.sin(th), np.cos(th), 0.0])
-        (p2, t2), _ = project(np.array([pos, pos + 0.1 * tan3]), cam)
+        (p2, t2), depth = project(np.array([pos, pos + 0.1 * tan3]), cam)
         ang_deg = np.degrees(np.arctan2(t2[1] - p2[1], t2[0] - p2[0]))
         if not -90 < ang_deg <= 90:
             ang_deg += 180 if ang_deg <= -90 else -180
+        size = 8.8 + 2.6 * float(np.clip(depth[0] / label_r, 0.0, 1.0))
         s.add(MathLabel(word, (float(p2[0]), float(p2[1])), ha="center",
                         va="center", angle_deg=float(ang_deg),
-                        role=Role.ACCENT1, size_pt=9.5))
+                        role=Role.ACCENT1, size_pt=size))
     return s
 
 
@@ -382,9 +428,45 @@ def assertions(g):
     # both piercing points face the camera, or their rods read as hidden
     assert phat @ toward > 0 and g["qhat"] @ toward > 0
 
-    # the line stays outside the unit circle, so its image stays northern
-    assert g["line_dist"] > 1.0
-    assert g["circle_img"][:, 2].min() > 0.0
+    # equator fixed, argued on-figure: L crosses the unit circle at two
+    # points, each fixed by the projection, and both drawn curves pass
+    # through them through the EXACT parameter samples
+    assert g["line_dist"] < 1.0, "L must be a secant of the unit circle"
+    tx1, tx2 = g["tx"]
+    t_lo, t_hi = g["line_trange"]
+    for E in g["fixed"]:
+        assert abs(np.linalg.norm(E[:2]) - 1.0) < 1e-9, "crossing off the circle"
+        assert E[2] == 0.0
+        img = stereo(E[:2])
+        assert np.linalg.norm(img - E) < 1e-9, "equator point not fixed"
+        assert float(E[:2] @ toward[:2]) > 0.0, "crossing not on the front arc"
+        # the drawn image-circle polyline passes through E exactly
+        assert np.linalg.norm(g["circle_img"] - E, axis=1).min() < 1e-9
+    assert t_lo < tx1 < tx2 < t_hi, "crossings outside the drawn segment"
+    # the drawn polyline also samples p-hat and q-hat exactly
+    for ahat in (g["phat"], g["qhat"]):
+        assert np.linalg.norm(g["circle_img"] - ahat, axis=1).min() < 1e-9
+    # the image dips south exactly on the chord (tx1, tx2) ...
+    inside = (g["line_ts"] > tx1 + 1e-12) & (g["line_ts"] < tx2 - 1e-12)
+    assert (g["circle_img"][inside, 2] < 0.0).all()
+    assert (g["circle_img"][~inside, 2] > -1e-12).all()
+    # ... and every southern sample is genuinely hidden: the whole circle
+    # faces the camera at this view (no sphere-hidden arc), and each
+    # southern point's sight line crosses z=0 outside the unit disc, on
+    # the near sheet — so dashing exactly the southern arc is honest
+    assert ((g["circle_img"] - g["sph"].center) @ toward).min() > 0.0
+    south = g["circle_img"][g["circle_img"][:, 2] < 0.0]
+    cross = south[:, :2] + (-south[:, 2:3] / toward[2]) * toward[:2]
+    assert (np.linalg.norm(cross, axis=1) > 1.0 - 1e-9).all(), \
+        "southern arc sight line re-enters the unit disc"
+    assert (cross @ toward[:2] > 0.0).all(), "occluder not on the near sheet"
+    u, v = g["plane_uv"]
+    (es0, es1), (et0, et1) = g["plane_ext"]
+    assert (cross @ u[:2] > -es0).all() and (cross @ u[:2] < es1).all()
+    assert (cross @ v[:2] > -et0).all() and (cross @ v[:2] < et1).all()
+    # direction stubs sit on solid runs of L, outside the chord
+    for pt3, _ in g["line_stubs"]:
+        assert np.linalg.norm(pt3[:2]) > 1.0, "line arrow on the hidden chord"
 
     # lines map to circles through N: every pointwise-projected image of
     # the line is coplanar with N (the plane spanned by N and the line)
