@@ -9,9 +9,10 @@ whitespace between its neighbors with `gap_pt` of clearance on both sides,
 and hangs sans-register glosses beneath the glossed terms.
 
 Layout happens in math units but is metric in px: the caller states
-`px_per_unit`, the same math-units -> canvas-px bridge `plots.px_units`
-serves (a figure computes it from its FORMAT width and xlim, e.g. via
-`schematic.px_per_unit`). Point sizes convert through `typeset.PX_PER_PT`
+`px_per_unit`, canvas px per math unit — compute it from the figure's
+FORMAT width and xlim via `schematic.px_per_unit`. (`plots.px_units`
+serves the same bridge but returns the RECIPROCAL, math units per px;
+invert it before passing it here.) Point sizes convert through `typeset.PX_PER_PT`
 — `size_pt` is authored reading-size pt, the convention every MathLabel
 already uses.
 
