@@ -40,12 +40,21 @@ def compute(p):
     # exact below the knee; smoothly compressed toward cap above it, so the
     # infinite chimneys render as clean spires with no clipping artifacts
     knee, cap = p["knee"], p["cap"]
-    F = np.where(F_raw <= knee, F_raw,
-                 knee + (cap - knee) * np.tanh((F_raw - knee) / (cap - knee)))
+
+    def compress(v):
+        return np.where(v <= knee, v,
+                        knee + (cap - knee) * np.tanh((v - knee) / (cap - knee)))
+
+    F = compress(F_raw)
+    # the |z| = 1 circle draped on the surface: it passes through both poles
+    th = np.linspace(0, 2 * np.pi, 500)
+    zc = np.exp(1j * th)
+    circ_h = compress(1.0 / np.abs(1.0 + zc * zc))
+    circle = np.column_stack([zc.real, zc.imag, circ_h])
     xt = np.linspace(-h, h, 220)
     trace = np.column_stack([xt, np.zeros_like(xt), 1.0 / (1.0 + xt * xt)])
     return {"X": X, "Y": Y, "F": F, "F_raw": F_raw, "knee": knee,
-            "trace": trace, "cap": p["cap"], "h": h}
+            "trace": trace, "circle": circle, "cap": p["cap"], "h": h}
 
 
 def build(g):
@@ -66,6 +75,8 @@ def build(g):
     surf = surface_items(g["X"], g["Y"], g["F"], cam)
     trace = polyline_items(g["trace"], cam, depth_bias=0.05,
                            role=Role.ACCENT2, width_scale=1.5)
+    circle = polyline_items(g["circle"], cam, depth_bias=0.06,
+                            role=Role.ACCENT1, width_scale=1.1)
 
     # dashed verticals through the pole chimneys
     poles = []
@@ -75,11 +86,11 @@ def build(g):
         poles += polyline_items(line3, cam, depth_bias=0.02,
                                 role=Role.CONSTRUCTION, width_scale=0.9)
 
-    s.items.extend(compose(plane_items, surf, trace, poles))
+    s.items.extend(compose(plane_items, surf, trace, circle, poles))
 
     # axis arrows on the plane, outside the surface footprint
     for tip3, tail3, latex, ha in (
-        ((1.7, -h - m - 0.28, 0.0), (0.1, -h - m - 0.28, 0.0), r"\mathrm{Re}\, z", "left"),
+        ((h + m + 0.85, 0.0, 0.0), (h + 0.12, 0.0, 0.0), r"x = \mathrm{Re}\, z", "left"),
         ((h + m + 0.28, -0.4, 0.0), (h + m + 0.28, -2.0, 0.0), r"\mathrm{Im}\, z", "left"),
     ):
         (tail2, tip2), _ = project(np.array([tail3, tip3], dtype=float), cam)
@@ -93,13 +104,26 @@ def build(g):
         s.add(MathLabel(latex, tuple(top2), ha="center", va="bottom", offset_px=(0, -3)))
 
     # the tranquil slice, named at its front end
-    (lab2,), _ = project(np.array([[g["h"], 0.0, 1.0 / (1.0 + g["h"] ** 2)]]), cam)
-    s.add(MathLabel(r"y = \frac{1}{1+x^2}", tuple(lab2), ha="left", va="top",
-                    offset_px=(16, 10), role=Role.ACCENT2))
+    (lab2,), _ = project(np.array([[1.45, 0.0, 0.0]]), cam)
+    s.add(MathLabel(r"y = \frac{1}{1+x^2}", tuple(lab2), ha="center", va="top",
+                    offset_px=(-10, 34), role=Role.ACCENT2))
 
     # the mechanism: R = 1 = distance from 0 to the poles
-    s.add(MathLabel(r"R = \mathrm{dist}(0, \pm i) = 1", tuple(lab2), ha="left", va="top",
-                    offset_px=(16, 44), size_pt=10, role=Role.ANNOTATION))
+    s.add(MathLabel(r"R = \mathrm{dist}(0, \pm i) = 1", tuple(lab2), ha="center", va="top",
+                    offset_px=(-10, 68), size_pt=10, role=Role.ANNOTATION))
+
+    # the convergence circle, labeled where it crosses the front
+    (cl2,), _ = project(np.array([[0.72, -0.72, 0.75]]), cam)
+    s.add(MathLabel(r"|z| = 1", tuple(cl2), ha="left", va="top", offset_px=(16, 20),
+                    color="#3d6fb4"))
+    # name the surface and admit the truncation
+    (sl2,), _ = project(np.array([[-2.0, 0.9, 0.55]]), cam)
+    s.add(MathLabel(r"\left|\tfrac{1}{1+z^2}\right|", tuple(sl2), ha="right",
+                    va="center", offset_px=(-78, -46), role=Role.ANNOTATION))
+    (tr2,), _ = project(np.array([[0.0, 1.0, g["cap"] + 0.42]]), cam)
+    s.add(MathLabel(r"(\text{spires truncated; poles are infinite})",
+                    (tr2[0], tr2[1]), ha="left", va="center", offset_px=(60, -4),
+                    size_pt=8, role=Role.ANNOTATION))
 
     # plane label
     (c2,), _ = project(np.array([[h + m - 0.25, -h + 0.28, 0.0]]), cam)
