@@ -2,10 +2,14 @@
 
 import math
 
+import numpy as np
 import pytest
 
 from figlib.color import is_monotone, lightness, to_oklab
+from figlib.scene import FilledCurve, Gradient
 from figlib.shading import chroma_ramp, quantize
+
+_TRI = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
 
 
 def test_ramp_lightness_monotone():
@@ -51,3 +55,32 @@ def test_quantize_band_count():
 def test_quantize_rejects_degenerate():
     with pytest.raises(ValueError):
         quantize(chroma_ramp("#3a6ea5"), 1)
+
+
+def test_gradient_from_ramp_stops():
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0), n=5)
+    assert len(g.stops) == 5
+    assert g.stops[0][0] == 0.0 and g.stops[-1][0] == 1.0
+    assert g.stops[0][1] == ramp(0.0) and g.stops[-1][1] == ramp(1.0)
+    assert g.kind == "linear"
+
+
+def test_gradient_from_ramp_t_range():
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0), t_range=(0.4, 0.6), n=3)
+    assert g.stops[1][1] == ramp(0.5)
+
+
+def test_filledcurve_gradient_and_pattern_rejected():
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0))
+    with pytest.raises(ValueError):
+        FilledCurve(_TRI, gradient=g, pattern="stipple")
+
+
+def test_filledcurve_gradient_alone_ok():
+    ramp = chroma_ramp("#3a6ea5")
+    g = Gradient.from_ramp(ramp, (0.0, 0.0), (1.0, 0.0))
+    fc = FilledCurve(_TRI, gradient=g, grain=0.3, opacity=1.0)
+    assert fc.gradient is g and fc.grain == 0.3

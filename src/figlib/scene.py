@@ -45,6 +45,32 @@ class Curve:
     casing: bool = False
 
 
+@dataclass(frozen=True)
+class Gradient:
+    """A fill paint: linear or radial color ramp, axis in MATH coords.
+
+    p0 -> p1 is the linear axis (radial: center -> a point on the rim).
+    Coordinates are scene coords like every primitive; only
+    layout.Transform converts them at emission.
+    """
+    stops: tuple[tuple[float, str], ...]   # (offset in [0,1], "#rrggbb")
+    kind: str = "linear"                   # "linear" | "radial"
+    p0: XY = (0.0, 0.0)
+    p1: XY = (1.0, 0.0)
+
+    @staticmethod
+    def from_ramp(ramp: Callable[[float], str], p0: XY, p1: XY, *,
+                  t_range: tuple[float, float] = (0.0, 1.0), n: int = 5,
+                  kind: str = "linear") -> "Gradient":
+        """Sample `ramp` over t_range into n evenly spaced stops."""
+        t0, t1 = t_range
+        stops = tuple((k / (n - 1), ramp(t0 + (t1 - t0) * k / (n - 1)))
+                      for k in range(n))
+        return Gradient(stops=stops, kind=kind,
+                        p0=(float(p0[0]), float(p0[1])),
+                        p1=(float(p1[0]), float(p1[1])))
+
+
 @dataclass
 class FilledCurve:
     pts: np.ndarray                # (N, 2), closed implicitly
@@ -62,6 +88,16 @@ class FilledCurve:
     # interior boundaries, each (N, 2) closed implicitly: one path with
     # multiple subpaths and fill-rule evenodd; outline strokes all of them
     holes: tuple[np.ndarray, ...] = ()
+    # gradient fill paint (overrides color); axis in math coords
+    gradient: Gradient | None = None
+    # grain INSIDE the fill: 0 = none, else opacity of the grain tile
+    # overlaid on this shape (skipped on transparent themes)
+    grain: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.gradient is not None and self.pattern is not None:
+            raise ValueError(
+                "FilledCurve: gradient and pattern are competing fill paints")
 
 
 @dataclass
