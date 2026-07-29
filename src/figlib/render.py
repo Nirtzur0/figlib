@@ -489,6 +489,10 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
             tip = t.to_canvas(it.tip)
             d = (tip[0] - tail[0], tip[1] - tail[1])
             n = math.hypot(*d) or 1.0
+            if it.pull_back_px:
+                # retract the drawn head short of the semantic tip
+                tip = (tip[0] - it.pull_back_px * d[0] / n,
+                       tip[1] - it.pull_back_px * d[1] / n)
             # shorten shaft so it doesn't poke through the head
             hl = style.arrowhead_len * 0.85
             shaft_end = (tip[0] - hl * d[0] / n, tip[1] - hl * d[1] / n)

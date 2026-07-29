@@ -161,6 +161,29 @@ def test_embed_leader_is_an_annotation_vector_from_rect_boundary():
     assert np.allclose(leader.tail, (0.5, 0.0))   # nearest rect boundary point
 
 
+def test_embed_leader_pull_back_px_rides_the_vector():
+    small = Scene(xlim=(-1, 1), ylim=(-1, 1))
+    small.add(Point((0.0, 0.0)))
+    out = embed(small, at=(0.0, 0.0), width=1.0, leader_to=(3.0, 0.0),
+                leader_pull_back_px=8.0)
+    leader = next(it for it in out if isinstance(it, Vector))
+    assert leader.pull_back_px == 8.0
+    # the semantic tip stays the target; the retraction is drawing-only
+    assert np.allclose(leader.tip, (3.0, 0.0))
+
+
+def test_embed_rejects_a_clipped_small_scene():
+    # v1 does not transfer Scene.clip; silently embedding unclipped content
+    # was the one silent-wrong-output path left.
+    clipped = Scene(xlim=(0, 1), ylim=(0, 1), clip="frame")
+    with pytest.raises(ValueError, match="clip"):
+        embed(clipped, at=(0.0, 0.0), width=1.0)
+    poly = Scene(xlim=(0, 1), ylim=(0, 1),
+                 clip_pts=np.array([[0, 0], [1, 0], [1, 1]]))
+    with pytest.raises(ValueError, match="clip"):
+        embed(poly, at=(0.0, 0.0), width=1.0)
+
+
 def test_embed_forwards_key_onto_every_item():
     small = _unit_scene()
     small.add(Point((0.5, 0.5)), Curve(np.array([[0.0, 0.0], [1.0, 1.0]])))

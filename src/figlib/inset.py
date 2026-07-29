@@ -56,8 +56,10 @@ Furniture (kept minimal — the thumbnail is the content):
 
 Known limit (v1): inset content is NOT clipped to its frame. Content
 computed past the small scene's xlim/ylim leaks into the host; the frame
-is FRAME-role ink, so the leak is visible, and `Scene.clip` on the small
-scene does not transfer. Clip the small scene's data at compute time.
+is FRAME-role ink, so the leak is visible. `Scene.clip`/`clip_pts` on the
+small scene do not transfer — a clipped small scene is REJECTED with a
+ValueError rather than silently embedded unclipped. Clip the small
+scene's data at compute time.
 """
 
 from __future__ import annotations
@@ -187,15 +189,34 @@ def _nearest_boundary(x0: float, y0: float, x1: float, y1: float,
 
 
 def embed(small: Scene, *, at: XY, width: float, frame: bool = True,
-          leader_to: XY | None = None, key: str | None = None) -> list[Item]:
+          leader_to: XY | None = None, leader_pull_back_px: float = 0.0,
+          key: str | None = None) -> list[Item]:
     """Map `small`'s items into host math coords; see the module docstring
-    for the mapping rules. Returns items ready for `host.add(*...)`."""
+    for the mapping rules. Returns items ready for `host.add(*...)`.
+
+    `leader_pull_back_px` retracts the drawn leader head this many CANVAS
+    px short of `leader_to` (drawing-only — the Vector's tip stays the
+    target), so a leader can point AT a glyph without landing ON it.
+
+    PRECONDITION: the HOST plane should be equal-aspect, or the embedded
+    thumbnail is sheared — `embed` maps math coords and cannot see the
+    host transform. On an anisotropic host (explicit `height_px`), do the
+    px algebra at compute time: get (units/px) for both axes from
+    `plots.px_units(host, width_px)` and size the small scene's ylim so
+    the RENDERED height comes out right — `figures/
+    saddle_node_behavior_map.py` is the worked example.
+    """
     if small.xlim is None or small.ylim is None:
         raise ValueError("embed: the small scene needs explicit xlim/ylim "
                          "(the mapping needs a source rect)")
     if small.height_px is not None:
         raise ValueError("embed: height_px scenes have no math aspect; "
                          "give the small scene equal-aspect xlim/ylim")
+    if small.clip is not None or small.clip_pts is not None:
+        raise ValueError("embed: Scene.clip/clip_pts do not transfer (v1) "
+                         "— embedding would silently draw the UNCLIPPED "
+                         "content into the host. Clip the small scene's "
+                         "data at compute time instead")
     sx0, sx1 = small.xlim
     sy0, sy1 = small.ylim
     dx, dy = sx1 - sx0, sy1 - sy0
@@ -227,7 +248,8 @@ def embed(small: Scene, *, at: XY, width: float, frame: bool = True,
     if leader_to is not None:
         tail = _nearest_boundary(bx0, by0, bx1, by1, leader_to)
         out.append(Vector(tail, (float(leader_to[0]), float(leader_to[1])),
-                          role=Role.ANNOTATION))
+                          role=Role.ANNOTATION,
+                          pull_back_px=leader_pull_back_px))
     if key is not None:
         out = [dataclasses.replace(it, key=key) for it in out]
     return out

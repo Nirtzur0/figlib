@@ -114,6 +114,11 @@ class Vector:
     tip: XY
     role: Role = Role.CONTENT
     width_scale: float = 1.0
+    # Draw the head this many CANVAS px short of `tip`, along the shaft.
+    # Drawing-only: `tip` stays the semantic target (leaders that should
+    # point AT a glyph without landing ON it). Canvas px like the head
+    # itself — the retraction is ink, not geometry.
+    pull_back_px: float = 0.0
     # False -> ghost copy: paper-filled head and shaft outline (the
     # white-original / black-image convention of amplitwist figures)
     filled: bool = True
