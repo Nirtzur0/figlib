@@ -13,6 +13,7 @@ import math
 from typing import Callable
 
 from .color import oklch_to_rgb, to_hex, to_oklab
+from .theme import SHADE, Hue
 
 Ramp = Callable[[float], str]
 
@@ -41,7 +42,10 @@ def chroma_ramp(base: str, *,
         h = h0 + math.radians(hue_cool + u * (hue_warm - hue_cool))
         C = c0 * (c_scale[0] + u * (c_scale[1] - c_scale[0]))
         rgb = oklch_to_rgb(L, C, h)
-        return to_hex(tuple(float(v) for v in rgb))
+        # SHADE-tagged: the color gate exempts shading fills by channel —
+        # a ramp's lit end is MEANT to approach the paper; its readability
+        # contract is monotone lightness, gated in tests, not figure-ground
+        return Hue(to_hex(tuple(float(v) for v in rgb)), SHADE)
 
     return ramp
 

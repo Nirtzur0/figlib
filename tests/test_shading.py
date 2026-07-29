@@ -46,6 +46,14 @@ def test_ramp_hue_actually_drifts():
     assert abs(math.degrees(dh)) > 30.0
 
 
+def test_ramp_colors_are_shade_tagged():
+    # the color gate exempts SHADE-channel fills; the ramp's own
+    # readability contract is the monotone-lightness test above
+    from figlib.theme import SHADE
+    ramp = chroma_ramp("#c0504d")
+    assert getattr(ramp(0.5), "channel", None) == SHADE
+
+
 def test_ramp_clamps_t():
     ramp = chroma_ramp("#3a6ea5")
     assert ramp(-1.0) == ramp(0.0)
