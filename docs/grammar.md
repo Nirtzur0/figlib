@@ -61,6 +61,15 @@ State, in order:
   real draws, but the seed is selected so drawn paths stay in frame and
   hit the claim's cases (both modes). Selection is on legibility, never
   on the claim.
+- **Make the mechanism geometric, not verbal.** If a caption states a
+  geometric fact ("R = distance to the poles"), draw the object that
+  embodies it (the |z|=1 circle draped on the surface, running into both
+  poles). A stated fact the drawing could show is a defect. (Fig 14
+  readback: "the single fact the figure exists to establish is the one
+  thing left to the caption.")
+- **Admit depictions' lies.** Infinite quantities rendered finite
+  (truncated spires) get a small printed admission; an unlabeled
+  truncation reads as a finite maximum.
 - **One claim per figure.** Stages of an argument get [a]/[b] panels.
 - **Trim to content.** Located whitespace (an empty quadrant) is a
   design smell; axes end just past the content they support.
