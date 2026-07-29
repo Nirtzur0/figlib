@@ -43,6 +43,8 @@ class Theme(Style):
     surface_edge: str = "#6a6f7a"
     # film grain overlay opacity; 0 disables
     grain: float = 0.0
+    # no paper rect, no grain; SVG/PNG keep alpha for embedding in documents
+    transparent: bool = False
 
     def ramp(self, t: float) -> str:
         return _lerp_hex(self.ramp_stops, t)
@@ -83,6 +85,16 @@ RISO = Theme(
     surface_edge="#7a6f63",
     grain=0.5,
 )
+
+
+def transparent_variant(theme: Theme) -> Theme:
+    """The same ink and palettes, no paper — for embedding in other work."""
+    from dataclasses import replace
+    return replace(theme, transparent=True)
+
+
+RISO_T = transparent_variant(RISO)
+CLEAN_T = transparent_variant(CLEAN)
 
 
 def grain_tile_datauri(size: int = 140, seed: int = 11) -> str:

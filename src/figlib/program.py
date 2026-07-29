@@ -54,7 +54,8 @@ def load_program(path: str | Path) -> ModuleType:
 
 
 def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
-        style: Style = DEFAULT_STYLE, width_px: float = 900) -> Report:
+        style: Style = DEFAULT_STYLE, width_px: float = 900,
+        transparent: bool = False) -> Report:
     if not isinstance(program, ModuleType):
         program_path = Path(program)
         mod = load_program(program_path)
@@ -65,9 +66,14 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
     out = Path(out_dir) if out_dir else default_out
 
     style = getattr(mod, "THEME", None) or style
+    if transparent:
+        from .theme import Theme, transparent_variant
+        if isinstance(style, Theme):
+            style = transparent_variant(style)
     geom = mod.compute(mod.PARAMS)
     scene = mod.build(geom)
     diags = numerical(lambda: mod.assertions(geom))
     diags += mechanical(scene, style, width_px=width_px)
-    svg_path, png_path = save(scene, out / mod.__name__, style, width_px=width_px)
+    stem = mod.__name__ + ("_transparent" if transparent else "")
+    svg_path, png_path = save(scene, out / stem, style, width_px=width_px)
     return Report(mod.__name__, mod.CLAIM, svg_path, png_path, diags)

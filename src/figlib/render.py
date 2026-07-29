@@ -65,8 +65,11 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
         },
     )
     defs = ET.SubElement(root, "defs")
-    paper = getattr(style, "paper", None)
-    if paper and paper[0] != paper[1]:
+    transparent = getattr(style, "transparent", False)
+    paper = None if transparent else getattr(style, "paper", None)
+    if transparent:
+        bg_fill = None
+    elif paper and paper[0] != paper[1]:
         grad = ET.SubElement(defs, "linearGradient",
                              {"id": "paper", "x1": "0", "y1": "0", "x2": "0", "y2": "1"})
         ET.SubElement(grad, "stop", {"offset": "0", "stop-color": paper[0]})
@@ -74,8 +77,9 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
         bg_fill = "url(#paper)"
     else:
         bg_fill = paper[0] if paper else style.background
-    ET.SubElement(root, "rect", {"x": "0", "y": "0", "width": _fmt(t.canvas_w),
-                                 "height": _fmt(t.canvas_h), "fill": bg_fill})
+    if bg_fill is not None:
+        ET.SubElement(root, "rect", {"x": "0", "y": "0", "width": _fmt(t.canvas_w),
+                                     "height": _fmt(t.canvas_h), "fill": bg_fill})
 
     for it in scene.items:
         if isinstance(it, Curve):
@@ -125,7 +129,8 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
             if it.filled:
                 attrs["fill"] = ink.color
             else:
-                attrs.update({"fill": style.background, "stroke": ink.color,
+                attrs.update({"fill": "none" if transparent else style.background,
+                              "stroke": ink.color,
                               "stroke-width": _fmt(ink.width)})
             ET.SubElement(root, "circle", attrs)
 
@@ -160,7 +165,7 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
                       color=it.color or style.ink(it.role).color,
                       halign=it.ha, valign=it.va)
 
-    grain = getattr(style, "grain", 0.0)
+    grain = 0.0 if transparent else getattr(style, "grain", 0.0)
     if grain > 0:
         from .theme import grain_tile_datauri
         pat = ET.SubElement(defs, "pattern", {

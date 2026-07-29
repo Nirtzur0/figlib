@@ -75,3 +75,10 @@ class TestRender:
         png_file = stem.with_suffix(".png")
         assert svg_file.exists() and svg_file.stat().st_size > 500
         assert png_file.exists() and png_file.stat().st_size > 500
+
+    def test_transparent_theme_emits_no_background(self):
+        from figlib.theme import RISO, RISO_T
+        opaque = to_svg(make_scene(), RISO, width_px=900)
+        clear = to_svg(make_scene(), RISO_T, width_px=900)
+        assert "<rect" in opaque and "url(#grain)" in opaque
+        assert "<rect" not in clear and "grain" not in clear

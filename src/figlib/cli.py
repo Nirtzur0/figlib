@@ -21,9 +21,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--width", type=float, default=1100)
     ap.add_argument("--readback-prompt", action="store_true",
                     help="print the cold-reader prompt for the rendered PNG")
+    ap.add_argument("--transparent", action="store_true",
+                    help="render with no paper/grain; SVG+PNG keep alpha")
     args = ap.parse_args(argv)
 
-    report = run(args.program, width_px=args.width)
+    report = run(args.program, width_px=args.width, transparent=args.transparent)
     print(report.summary())
     if args.readback_prompt:
         print("\n--- readback prompt ---")
