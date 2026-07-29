@@ -21,6 +21,25 @@ CLAIM = (
     "the top: the flux-tube density is the speedup that generates lift."
 )
 
+EXPOSITION = """
+Needham reaches this picture two figures after establishing the totally
+irrotational flow round the disc (VCA, "Flows and Harmonic Functions,"
+Fig [12]): Omega = U(z + 1/z), no circulation, stagnation points sitting
+symmetrically at +-1. He then superposes a vortex term
+-i*Gamma/(2pi) log z -- Fig [13] -- and reports, without derivation, that
+the two stagnation points slide toward each other along the circle as
+|Gamma| grows, coalescing at i for one critical value and then leaving
+the circle altogether (Fig [14], a qualitatively different flow). The
+reader is left to take the sliding on faith. This figure is the picture
+that makes sin(theta_s) = Gamma/(4 pi U) checkable: circulation at a
+value short of coalescence, the two stagnation points visibly displaced
+but still on the cylinder, and the equally spaced Psi-levels crowding
+over the top -- the same equal-increment k-cells from the complex-
+potential construction, now compressed on one side, which is the
+geometric content of lift before any mention of the Kutta-Joukowski
+theorem.
+"""
+
 FORMAT = WIDE
 THEME = RISO
 

@@ -37,6 +37,29 @@ CLAIM = (
     "multiplicity."
 )
 
+EXPOSITION = """
+Chapter 7, "Winding Numbers and Topology," builds toward the Argument
+Principle by first making the winding number itself a physical,
+countable thing — how many times a loop wraps the origin, read off a
+picture rather than computed as an integral. Needham then asks the
+question the topology exists to answer: if f is analytic and Gamma is a
+loop that avoids every zero and pole of f, how many times does the
+image curve f(Gamma) wind around w = 0? His answer, argued directly
+from arg f(z) = sum_i arg(z - z_i) - sum_j arg(z - p_j), is that only
+the zeros and poles Gamma actually encloses contribute net turning as z
+completes its loop — everything outside contributes nothing, because
+its vantage point is never circled. A zero of multiplicity two pulls
+twice the turning of a simple zero, for the same reason a rope wound
+twice around a post takes two full turns to unwind.
+
+This figure makes that bookkeeping visible: a double zero and a simple
+zero sit inside a circular Gamma, and the reader watches f(Gamma) coil
+around the origin three times for one circuit of Gamma — two turns
+traceable to the double root, one to the simple one — so multiplicity
+is read off the image curve's own winding, not asserted from the
+formula.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

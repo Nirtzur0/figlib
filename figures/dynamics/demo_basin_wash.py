@@ -31,6 +31,22 @@ CLAIM = (
     "gradient flow; every trajectory off it ends at the sink of its side."
 )
 
+EXPOSITION = """
+A bistable flow is only half specified by its sinks -- the other half is
+which initial conditions end up at which sink, and that partition is drawn
+by the stable manifold of whatever saddle sits between them. For the
+gradient flow of a double-well potential, the saddle at the origin has a
+one-dimensional stable manifold that is a single curve, yet that curve of
+measure zero is doing all the classifying work: cross it and the long-run
+fate of the trajectory flips discontinuously, even though the vector field
+itself varies smoothly. This is the argument a reader needs before basins
+of attraction stop being a vague picture of "regions that flow somewhere"
+and become the specific claim that the boundary between two basins is
+exactly the saddle's stable manifold, nothing more and nothing less --
+the same fact that underlies watershed boundaries, separatrices in
+predator-prey models, and the basin geometry of any multistable system.
+"""
+
 THEME = RISO
 
 PARAMS = {

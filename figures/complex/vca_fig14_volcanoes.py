@@ -26,6 +26,24 @@ CLAIM = (
     "up to distance 1 — the distance to the invisible complex poles."
 )
 
+EXPOSITION = """
+Needham sets this figure up (VCA ch. 2, "Power Series," section "The
+Mystery of Real Power Series," p. 66) as the resolution to a puzzle he
+poses deliberately. G(x) = 1/(1-x^2) and H(x) = 1/(1+x^2) have the
+identical radius of convergence, 1, but only G's breakdown makes sense on
+the real line -- G actually blows up at x = +-1, while H stays smooth and
+bounded everywhere real x can reach. Something invisible from the real
+axis alone must be limiting H's series, and Needham's answer is to stop
+looking at the real axis alone: h(z) = 1/(1+z^2) has honest poles at
+z = +-i, and the radius of convergence of any Taylor series is exactly
+the distance to the nearest one. Fig [14] is the picture that makes the
+poles visible as poles -- not a formula, an eruption -- by plotting
+|h(z)| as a surface over the whole plane: the tame real-axis graph the
+reader already trusts is sitting right there as the front slice, and the
+two spires at +-i are the very singularities that were, all along, one
+unit away.
+"""
+
 PARAMS = {
     "half_width": 2.3,
     "grid_n": 116,

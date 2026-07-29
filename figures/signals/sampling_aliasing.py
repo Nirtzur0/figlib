@@ -28,6 +28,25 @@ CLAIM = (
     "2*omega_m - omega_s where the spectrum is unrecoverable."
 )
 
+EXPOSITION = """
+This is Oppenheim & Schafer's picture for why sampling has a rate at
+all: sampling a continuous signal at rate omega_s does not distort its
+spectrum, it replicates it -- convolving with an impulse comb places a
+full copy of X(j omega) at every integer multiple of omega_s. Nothing
+about a single replica changes; what changes is whether replicas
+collide. The Nyquist condition omega_s > 2 omega_m is not an assumption
+about the signal imposed for its own sake, it is the exact statement
+that consecutive copies of a triangle of half-width omega_m stay clear
+of each other. Read the frames in sequence: at omega_s > 2 omega_m the
+gap between copies is a real gap, and an ideal lowpass filter recovers
+the base replica intact. Push omega_s below 2 omega_m and the gap goes
+negative -- the replicas overlap in a band of width 2 omega_m - omega_s,
+and inside that band the sampled spectrum is the SUM of two triangles
+that no filter can separate back into one, because the aliased
+frequency components are now indistinguishable from ones that were
+never there. That band, not an inequality, is what aliasing is.
+"""
+
 PARAMS = {
     "omega_m": 1.0,
     "omega_s_ok": 2.5,       # panel b: > 2 omega_m, gap = 0.5

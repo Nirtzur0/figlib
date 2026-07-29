@@ -46,6 +46,31 @@ CLAIM = (
     "sends the disc to an ellipse instead."
 )
 
+EXPOSITION = """
+Chapter 4 of Visual Complex Analysis, "The Amplitwist Concept," is where
+Needham finally commits to what "complex differentiable" should mean
+geometrically, having spent three chapters building the vocabulary of
+maps-as-transformations. The naive route -- treat f as a map R^2 -> R^2
+and demand its Jacobian exist -- buries the interesting fact inside a
+2x2 matrix. Needham's move is to notice that when f'(z0) exists and is
+nonzero, that Jacobian is not an arbitrary linear map: it is
+multiplication by the single complex number f'(z0), which stretches
+every direction by the same factor |f'(z0)| and rotates it by the same
+angle arg f'(z0). He names this one number the amplitwist and only
+afterward shows it is equivalent to the Cauchy-Riemann equations -- the
+algebra is a corollary of the geometry, not the other way round. The
+reader is asked to accept, on the strength of a picture of one arrow
+turning into another, that a generic smooth map does NOT have this
+property; nothing in the prose forces that belief.
+
+This figure is the falsification the chapter's prose does not attempt:
+the same disc-of-arrows construction run once on an analytic map and
+once on a real-linear map with unequal axis stretches, so "same
+amplitwist in every direction" and "different amplitwist by direction"
+sit side by side as two outcomes of one procedure, not as a claim and
+its unstated opposite.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

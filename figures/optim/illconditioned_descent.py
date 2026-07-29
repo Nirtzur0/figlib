@@ -44,6 +44,24 @@ CLAIM = (
     "Hessian and so never sees kappa at all."
 )
 
+EXPOSITION = """
+The optimization textbook's standard cautionary result (Nocedal & Wright;
+Boyd & Vandenberghe) is that gradient descent's convergence rate on a
+quadratic is set by the Hessian's condition number kappa = L/mu, not by how
+carefully the step size is tuned. With the best constant step, steepest
+descent still needs on the order of kappa iterations to reach a fixed
+relative tolerance, because the same step that is barely stable along the
+steep direction is absurdly conservative along the shallow one -- the
+method is forced to zig-zag across the narrow valley instead of walking
+down it. A reader who has only seen the bound N ~ O(kappa) in symbols needs
+to see the zig-zag itself, and needs to see that the two standard remedies
+attack kappa rather than the step: heavy-ball momentum turns the recursion
+into a damped oscillator whose rate depends on sqrt(kappa) instead of
+kappa, at the cost of legitimate overshoot, while Newton's method rescales
+by the Hessian itself and so never sees kappa at all, converging in one
+step regardless of how ill-conditioned the problem is.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

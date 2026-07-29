@@ -17,6 +17,11 @@ TOY = textwrap.dedent('''
     from figlib.style import Role
 
     CLAIM = "The scaled parabola touches the origin."
+    EXPOSITION = """A synthetic figure used to exercise the runner. The
+    exposition gate has a word floor, so a fixture needs real sentences
+    here rather than a stub -- which is the gate working as intended, and
+    the cheapest possible demonstration that it fires on prose that is
+    merely present rather than actually written."""
     PARAMS = {"n": 51, "a": 1.0}
 
     def compute(p):

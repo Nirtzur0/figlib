@@ -94,6 +94,30 @@ CLAIM = (
     "same d_model width as the stream it is added to."
 )
 
+EXPOSITION = """
+Elhage et al., "A Mathematical Framework for Transformer Circuits"
+(transformer-circuits.pub, 2021), open by discarding the layer diagram
+everyone draws first. A transformer is not a stack of stages each
+consuming the last; it is a residual stream -- a d_model-wide vector
+per token, read and written additively by every attention head and MLP
+in the network -- with each sublayer's output a small perturbation on
+top of an otherwise-untouched channel. That reframing is what makes the
+rest of the paper's math work: because every layer's contribution is
+additive, the network's output decomposes into a sum over paths through
+the stream, and a path can be analyzed in isolation from every other
+one. The framework's central objects -- QK and OV circuits, induction
+heads, virtual attention heads formed by composing two real ones -- are
+all statements about what gets written to the stream and what a later
+layer reads back out of it, and none of them are visible in the
+box-and-arrow pipeline picture. This figure draws the one fact the
+prose states but the pipeline diagram hides: LayerNorm is inside the
+branch, not on the spine, so what the next sublayer reads is a
+normalized copy while what survives to the end of the network is the
+raw sum. Getting that ordering backwards -- treating the normalized
+stream as what persists -- silently breaks the additive decomposition
+the whole framework depends on.
+"""
+
 THEME = RISO
 FORMAT = COLUMN
 

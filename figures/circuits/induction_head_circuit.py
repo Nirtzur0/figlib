@@ -67,6 +67,31 @@ CLAIM = (
     "sits there into the output."
 )
 
+EXPOSITION = """
+Olsson et al., "In-context Learning and Induction Heads"
+(transformer-circuits.pub, 2022), trace a sharp bend in the training
+loss curve of every transformer they looked at -- a phase change,
+visible in the raw curve before any circuit analysis is done -- to a
+single mechanism appearing at that exact point in training. The
+mechanism needs two heads at two different layers to compose, and
+neither head alone explains anything: a previous-token head at an
+early layer writes "the token before me was A" into the residual
+stream at every position, and an induction head at a later layer forms
+a query from the CURRENT token, matches it against those written
+keys -- not against the tokens themselves -- and copies whatever
+token sat one position after the match. The composition is what does
+the work: it is what lets the induction head generalize to sequences
+and tokens it has never seen, because the previous-token head's write
+is available at inference time regardless of vocabulary. The
+prose version of this -- "attends to the token after an earlier
+occurrence of the current token" -- reads as a description of a single
+attention pattern, and hides that the pattern is only possible because
+an earlier layer already computed and stored the thing being matched
+against. The figure exists to make that composition, not the attention
+pattern alone, the object in view: which layer writes, what it writes,
+and which layer's query is built to read exactly that.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

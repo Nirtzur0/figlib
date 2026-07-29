@@ -23,6 +23,24 @@ CLAIM = (
     "and share the same marginals at every intermediate time."
 )
 
+EXPOSITION = """
+Once a diffusion model's score function is trained, there are two distinct
+ways to turn noise into data, and understanding why they agree is what
+separates knowing the formula from understanding the object. The reverse
+SDE integrates a stochastic differential equation driven by the same score
+field plus injected noise, producing a different, jittery sample path every
+time it is run from the same starting point. The probability-flow ODE
+drops the injected noise and keeps only the deterministic drift, producing
+a single smooth, invertible trajectory. The two are not two competing
+samplers where one is an approximation of the other -- they are two
+different stochastic processes that happen to share every one-time
+marginal distribution p_t(x), by construction of the score field they both
+integrate. A reader needs to see this to understand why swapping SDE
+sampling for ODE sampling (for speed, or for the ODE's exact likelihood via
+the instantaneous change-of-variables formula) changes nothing about what
+distribution comes out, only how the individual sample path gets there.
+"""
+
 THEME = RISO
 
 FORMAT = WIDE

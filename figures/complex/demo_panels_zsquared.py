@@ -23,6 +23,23 @@ CLAIM = (
     "r_0 < 1 contracts to radius r_0^2, and the unit circle maps to itself."
 )
 
+EXPOSITION = """
+Needham introduces z -> z^n (VCA ch. 2, "Polynomials," section "Positive
+Integer Powers," Fig [4]) as the first mapping the reader is asked to
+picture rather than compute: writing z = r e^{i theta}, w = r^n e^{in
+theta}, so a ray at angle theta lands on the ray at n*theta and a circle
+of radius r lands on the circle of radius r^n. Needham's own figure runs
+n = 3 on a handful of rays and arcs and leaves the general case to the
+reader; this pair specializes to n = 2 and asks the domain and codomain
+panels to carry the argument by correspondence rather than assertion --
+the same ray, the same circle, tracked by hue across both panels, landing
+exactly where the formula says. The unit circle is drawn as the one curve
+that does not move, because r = r^2 only at r = 1: it is the fixed set of
+the family, and the panel widths are set so it renders at the same size
+on both sides, so "maps to itself" is something the eye checks rather
+than something the caption asserts.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

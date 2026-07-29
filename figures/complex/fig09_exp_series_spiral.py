@@ -19,6 +19,24 @@ CLAIM = (
     "along the real axis toward e^θ."
 )
 
+EXPOSITION = """
+This is Needham's Fig [9] (VCA ch. 1, "Euler's Formula"), the second of
+two independent arguments he gives for e^{i theta} = cos theta +
+i sin theta. The first argument is kinematic: a particle at Z(t) = e^{it}
+has velocity i*Z(t), its position rotated a right angle, so it must trace
+the unit circle at unit speed. The second, drawn here, instead takes the
+defining property f' = f as a power series and evaluates it at
+z = i*theta: because multiplying by i is a right-angle turn, each term of
+the partial sum turns 90 degrees from the last, and the partial sums
+spiral rather than march. Needham's point is that ordinary convergence of
+the real series for e^theta -- terms all pointing the same way, summing
+straight down the real axis -- already guarantees the spiral converges to
+some point; what the picture has to additionally make undeniable is that
+the point it converges to is the very same e^{i theta} the kinematic
+argument produced, two arguments meeting at one point by two different
+routes.
+"""
+
 THEME = RISO
 
 PARAMS = {

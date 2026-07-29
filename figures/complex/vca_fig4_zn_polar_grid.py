@@ -19,6 +19,29 @@ CLAIM = (
     "grid intersection stays a right angle."
 )
 
+EXPOSITION = """
+Chapter 2, "Complex Functions as Transformations," section II.1
+("Positive Integer Powers"), is where Needham first cashes in the
+book's central habit — picture a function as a map that carries the
+whole plane somewhere, not as a formula evaluated pointwise. Before he
+has named the derivative or conformality, he needs the reader to
+already trust two structural facts about z -> z^n: radial lines survive
+as radial lines, only rotated by a multiple of their original angle,
+and circles survive as circles, only rescaled in radius. Both facts
+follow at once from writing z in polar form, z = r e^{i theta}, so that
+z^n = r^n e^{in theta} — but stated that way they read as an algebraic
+identity, not as a claim about shape. Needham's own figure at this
+point is exactly this: the polar grid under z -> z^n, because a grid is
+the cheapest object whose distortion makes "angles multiply, radii
+don't" into something the eye checks.
+
+This figure reproduces that grid with one modern addition: hue tags
+each ray by its angle, so a ray can be tracked to its image by color
+rather than by re-deriving n*theta, and the right angle at every grid
+crossing survives the map — conformality, a fact Needham has not yet
+named, already sitting in the picture.
+"""
+
 THEME = RISO
 
 FORMAT = WIDE

@@ -30,6 +30,24 @@ CLAIM = (
     "omega = 0 and pi."
 )
 
+EXPOSITION = """
+Julius Smith's way of reading a transfer function: don't compute
+|H(e^{j omega})| from algebra, read it off the z-plane geometrically.
+Every zero and pole is a fixed point in the plane; e^{j omega} is a
+point walking the unit circle as omega sweeps from 0 to pi. At any
+instant the magnitude response is the product of the distances from
+that walking point to each zero, divided by the product of distances to
+each pole -- a ratio of chord lengths, recomputed fresh at every omega,
+and the response curve is just that ratio plotted against the walk's
+angle. The shape follows without any transform: a pole close to the
+unit circle means some angle where the chord to it gets very short, so
+the denominator collapses and the response peaks near that pole's
+angle; a zero sitting ON the circle means the chord to it hits zero
+exactly there, so the response nulls at that zero's angle exactly.
+Nothing about the curve is a separate fact from the picture -- it is
+the picture, read as e^{j omega} completes its walk.
+"""
+
 PARAMS = {
     "pole_r": 0.85,
     "pole_theta": np.pi / 3,

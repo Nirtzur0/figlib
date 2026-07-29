@@ -28,6 +28,22 @@ CLAIM = (
     "the paths do not."
 )
 
+EXPOSITION = """
+The Ornstein-Uhlenbeck process is the standard model for a fluctuation that
+relaxes toward a mean but never stops fluctuating, and the point that trips
+up a first reading is the difference between what the ENSEMBLE does and
+what any ONE realization does. The mean of the ensemble decays exponentially
+toward zero and the variance saturates at a finite stationary value in
+finite time -- both are properties of the marginal distribution p_t(x), and
+both converge. No individual sample path converges to anything: at every
+later time it is still executing a mean-reverting random walk with the same
+stationary amplitude it always had. A reader who has only seen the moment
+equations dm/dt = -theta*m and dv/dt = sigma^2 - 2*theta*v can mistake
+"the distribution has settled down" for "the process has settled down" --
+they are not the same statement, and this figure is the demonstration that
+the density can freeze while every path underneath it keeps moving.
+"""
+
 THEME = RISO
 
 PARAMS = {

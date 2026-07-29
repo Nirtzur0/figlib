@@ -76,6 +76,25 @@ CLAIM = (
     "the ordered and disordered configurations either side do not."
 )
 
+EXPOSITION = """
+The statistical-mechanics account of a continuous phase transition rests
+on two claims that are easy to state and hard to make convincing in prose:
+the order parameter falls to zero smoothly rather than jumping, and the
+system's spatial structure changes qualitatively as the transition is
+approached, developing correlations at every length scale exactly at the
+critical point. For the 2D Ising model, Onsager's exact solution gives the
+magnetisation |m(T)| as a curve that touches zero at T_c with a genuine
+critical exponent rather than a kink or a discontinuity, and a reader
+needs to see that touch happen on the page to believe "continuous" means
+something more specific than "not a jump". The second claim needs its own
+evidence entirely separate from the curve: sampled spin configurations well
+below T_c form one dominant domain, well above T_c look like salt-and-pepper
+noise, and only at T_c does the configuration show clusters of aligned
+spins at every scale simultaneously -- the visual signature of scale
+invariance at a critical point, and the reason phase transitions are the
+bridge between statistical mechanics and renormalization-group theory.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

@@ -38,6 +38,23 @@ CLAIM = (
     "relative Frobenius error, 99.7% of the energy kept."
 )
 
+EXPOSITION = """
+The SVD is not a factorization to be trusted on faith, it is a sum:
+A = sum_k sigma_k u_k v_k^T, one rank-1 outer product per singular
+value, ordered so sigma_1 >= sigma_2 >= .... Because the terms are
+ordered and the singular values typically decay, truncating that sum
+after r terms is not an arbitrary compression -- Eckart-Young says it
+is the BEST rank-r approximation to A in Frobenius (and operator) norm,
+better than any other rank-r matrix obtained any other way. The question
+a truncation raises is always the same one: how much of A is really
+carried by the first few modes, and how much is left in the tail. A
+smooth kernel matrix answers that question favorably -- its singular
+values fall off fast enough that a handful of outer products already
+account for nearly all the energy -- but the claim is only honest if the
+discarded remainder is shown next to the kept terms at the same scale,
+not asserted from the decay rate alone.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

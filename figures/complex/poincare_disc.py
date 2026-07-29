@@ -38,6 +38,28 @@ CLAIM = (
     "permits exactly one."
 )
 
+EXPOSITION = """
+Chapter 6, "Non-Euclidean Geometry," is Needham's answer to a question
+the reader has been trained since childhood not to ask: is Euclid's
+fifth postulate actually necessary, or is it an assumption that could
+fail? Needham builds the Poincare disc concretely, as the fixed domain
+of the Mobius automorphisms of the unit disc, specifically so that
+"hyperbolic straight line" has a computable meaning -- a circular arc
+meeting the boundary at right angles, a diameter in the degenerate case
+-- rather than a purely axiomatic one. The chapter earns the model by
+making it answer the parallel postulate directly: given a line L and a
+point P off it, Euclid says exactly one line through P misses L. In the
+disc, Needham shows, that count is not one and not zero -- it is a
+continuum, bounded by two special geodesics that share an ideal
+endpoint with L, asymptotic to it at the boundary circle, with every
+geodesic strictly between them missing L entirely.
+
+This figure draws that count rather than asserting it: L, an external
+point P, its two limiting parallels, and a finite sample from the
+infinite non-crossing family between them, so "infinitely many" is a
+fan the reader can see opening rather than a phrase to take on faith.
+"""
+
 THEME = RISO
 FORMAT = COLUMN
 

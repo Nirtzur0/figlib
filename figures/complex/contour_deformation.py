@@ -87,6 +87,31 @@ CLAIM = (
     "pole."
 )
 
+EXPOSITION = """
+Chapter 8's Deformation Theorem (Visual Complex Analysis, "Complex
+Integration: Cauchy's Theorem," section VI.3, "General Contours and the
+Deformation Theorem") fixes a gap left by Cauchy's Theorem itself: that
+theorem forces the integral of an analytic function around a closed
+loop to vanish, but only inside a region with no singularity in it -- it
+says nothing about a loop that legitimately encircles a pole. Needham's
+fix is the rubber-band-and-peg picture: treat the contour as elastic,
+the singularity as a peg sticking out of the plane, and note that the
+value of the integral cannot change as the band is stretched, so long
+as it is never forced across the peg. Two loops of wildly different
+shape but the same class -- same peg inside, wound around it the same
+number of times -- must therefore carry the same integral, and dragging
+a loop bodily across the peg instead of shrinking it around the peg is
+exactly the one move the theorem forbids, because the argument breaks
+down at the instant the boundary passes over the singularity.
+
+This figure stages both halves of that claim rather than asserting
+them: three visibly different loops enclosing the same pole print the
+identical value 2*pi*i*Res, and a fourth panel performs the forbidden
+move -- dragging [c]'s exact loop across the pole -- so the reader
+watches the value jump by exactly the residue term at the one instant
+the deformation theorem's hypothesis fails.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

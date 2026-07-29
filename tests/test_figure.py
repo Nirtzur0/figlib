@@ -151,6 +151,11 @@ FIGURE_TOY = textwrap.dedent('''
     from figlib.scene import Curve, Scene
 
     CLAIM = "The identity map sends the square to itself."
+    EXPOSITION = """A synthetic figure used to exercise the runner. The
+    exposition gate has a word floor, so a fixture needs real sentences
+    here rather than a stub -- which is the gate working as intended, and
+    the cheapest possible demonstration that it fires on prose that is
+    merely present rather than actually written."""
     PARAMS = {}
 
     def compute(p):

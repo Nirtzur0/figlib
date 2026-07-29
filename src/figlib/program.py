@@ -28,11 +28,12 @@ from .gates import (Diagnostic, color_gate, color_gate_figure, mechanical,
 from .render import save, save_figure
 from .style import DEFAULT_STYLE, Style
 
-# Flip to True once every figure carries EXPOSITION. Landing it False lets the
-# gate ship without reddening a corpus that has not written the field yet --
-# regress raises on a failed gate, so enabling it early makes every figure
-# un-renderable and there is no way back in.
-EXPOSITION_REQUIRED = False
+# ON. Every figure in the corpus carries EXPOSITION, so a new one without it is
+# a bug, not a work-in-progress. It shipped False for exactly as long as it took
+# to backfill the field -- regress raises on a failed gate, so enabling it over
+# a corpus that had not written it would have made every figure un-renderable
+# with no way back in.
+EXPOSITION_REQUIRED = True
 
 
 @dataclass

@@ -41,6 +41,25 @@ CLAIM = (
     "read straight off the drawn polygons' shoelace areas."
 )
 
+EXPOSITION = """
+Every normalizing-flow paper writes down log p_Y(y) = log p_X(x) -
+log|det J_T(x)| as a single line of bookkeeping, and it is easy to read
+past it as a correction term rather than see what it is actually doing.
+Probability is a measure -- mass assigned to a set -- not a function value
+carried along by a map, so when a transformation T pushes a density
+forward, the density at the image point has to be divided by how much the
+map locally stretched or compressed area, because the SAME mass now
+occupies a different amount of space. A reader who has only manipulated
+the change-of-variables formula algebraically needs to see it happen on an
+actual grid: a uniform density pushed through a nonlinear shear, where the
+cells that expand visibly lighten and the cells that contract visibly
+darken, and where that lightening or darkening is exactly the reciprocal
+of the cell's own area ratio -- not an approximation of it. Get the sign or
+the determinant wrong in an implementation and the model silently
+mis-normalizes; this figure is the geometry that makes the correct
+bookkeeping visible instead of assumed.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

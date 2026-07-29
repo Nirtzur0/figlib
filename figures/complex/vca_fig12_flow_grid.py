@@ -37,6 +37,25 @@ CLAIM = (
     "where the map ceases to be conformal."
 )
 
+EXPOSITION = """
+This is Needham's Fig [12] itself (VCA, "Vector Fields and Complex
+Integration," section "The Complex Potential"), the flow he calls
+"totally irrotational": Gamma = 0, no vortex term, the one flow round the
+disc that a uniform stream determines uniquely and without ambiguity.
+Needham arrives at it by an argument built entirely from k-cells: once
+Phi and Psi are both harmonic and mutually orthogonal, choosing equal
+increments k for both families divides the plane into cells whose sides
+he proves equal in the limit -- "the k-cells are squares" -- and packages
+that fact as Omega' = H, the complex potential's derivative is the
+velocity field. This figure runs that theorem on the one example Needham
+actually draws: the streamline and equipotential ladders for
+Omega = z + 1/z, spaced by the same dk, so the near-square grid is
+something the reader can check cell by cell, and the two places the
+whole scheme is allowed to fail -- the stagnation points z = +-1, where
+Omega' vanishes and the squares degenerate into two branches crossing at
+45 degrees -- are shown actually breaking, not just marked.
+"""
+
 FORMAT = WIDE
 THEME = RISO
 

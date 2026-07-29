@@ -20,6 +20,29 @@ CLAIM = (
     "k=1 lemniscate mapping to the circle through the origin."
 )
 
+EXPOSITION = """
+Still in Chapter 2's "Polynomials" section (II.3, "Cassinian Curves"),
+Needham tells the history before the math: Newton's confocal ellipses
+(constant SUM of distances to two foci) against Cassini's rival family
+(constant PRODUCT of distances), proposed as a competing model of
+planetary orbits and wrong for that purpose, but geometrically
+interesting on its own terms — as k grows, the two-egg curve merges
+into a figure eight (Bernoulli's lemniscate), then rounds into an
+ellipse, and finally a circle. Needham's payoff is that this family is
+not an ad hoc zoo: writing the quadratic with roots at the two foci,
+Q(z) = (z-a1)(z-a2), the defining relation |z-a1||z-a2| = k^2 is exactly
+|Q(z)| = k^2, so every Cassinian curve is the PREIMAGE of an
+origin-centered circle |w| = k^2 under w = Q(z). The lemniscate, the
+curve everyone remembers, is just the one member of the family whose
+image circle happens to pass through the origin.
+
+This figure draws both sides of that correspondence — the Cassinian
+family on the left, the concentric circles it maps to on the right, one
+color per level k held across the arrow — so the "family of curves" is
+seen to be a single circle family in disguise, not a coincidence of
+shape.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

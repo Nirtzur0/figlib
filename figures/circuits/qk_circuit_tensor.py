@@ -62,6 +62,30 @@ CLAIM = (
     "the head width, inside an 8-dimensional model."
 )
 
+EXPOSITION = """
+Elhage et al., "A Mathematical Framework for Transformer Circuits"
+(transformer-circuits.pub, 2021), name the QK circuit as one of the two
+low-rank linear maps an attention head reduces to once the softmax is
+factored out, and the naming carries a claim that is easy to read past:
+W_Q and W_K never appear separately anywhere downstream of the
+attention pattern, only as the product W_Q W_K^T. Nothing later in the
+network -- not the softmax, not the OV circuit, not any subsequent
+layer -- has a way to observe the head axis that W_Q and W_K were each
+projected into; it is summed out before anything else happens. So
+"queries" and "keys" are not two learned mechanisms with independent
+meaning, they are a rank-d_head factorization of one bilinear form, and
+the factorization is a parameterization choice, not a structural fact
+about what the head computes. This matters wherever a factored
+representation gets read as if the factors themselves were meaningful
+-- interpreting W_Q or W_K in isolation, or expecting two heads with
+similar attention patterns to have similar per-matrix weights when only
+their product needs to agree. The figure draws both descriptions as
+tensor networks specifically to make the head axis's disappearance a
+visible fact about the diagram -- a wire present in one row and gone
+in the other -- rather than an algebraic identity the reader has to
+take on faith.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

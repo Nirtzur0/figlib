@@ -72,6 +72,22 @@ CLAIM = (
     "the axis, so no fixed point exists and the flow is rightward everywhere."
 )
 
+EXPOSITION = """
+Strogatz's treatment of one-dimensional flows builds toward the saddle-node
+bifurcation as the prototype for how equilibria are born and destroyed: not
+by a discontinuous jump but by two fixed points -- one stable, one unstable
+-- sliding toward each other as a parameter varies, merging into a single
+half-stable point at the critical value, and then vanishing entirely. The
+question a reader needs answered is why the merger is forced rather than
+coincidental: because the fixed points are exactly the zeros of a parabola
+that rides upward with the parameter, a real curve has to lose its two
+crossings by first fusing them into one tangency, not by teleporting them
+away. This figure is the argument for that mechanism, not an illustration
+of the endpoint: the parabola crossing the axis is the geometric object
+underneath the phrase "collision and annihilation of fixed points" that
+every subsequent bifurcation (transcritical, pitchfork, Hopf) builds on.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

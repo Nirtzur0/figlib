@@ -43,6 +43,24 @@ CLAIM = (
     "circle through N, so p -> infinity drives p-hat -> N."
 )
 
+EXPOSITION = """
+This is Needham's own construction diagram, Fig [19] (VCA ch. 3, "IV The
+Riemann Sphere"), placed at the exact moment the book needs a picture
+instead of a definition. Two pages earlier he has argued that z -> 1/z
+has no image at 0 and no preimage of 0 unless one point "at infinity" is
+added to the plane -- a point defined only by a limiting process, and he
+admits plainly that this leaves the reader "none the wiser" about how to
+grasp oo as a definite location. Stereographic projection from the north
+pole N is the answer: N is one point on an actual sphere, reachable and
+drawable the same way the south pole is, not a limit anyone has to take
+on faith. The figure has to carry two claims Needham states but does not
+prove without a picture: the equator -- the unit circle -- is fixed
+pointwise by the projection, and a line through p, followed out toward
+infinity, closes up into a genuine circle through N. This is the figure
+that turns "the extended plane has one new point" from a verbal patch
+into a place the reader can point at.
+"""
+
 PARAMS = {
     "p": (0.55, -1.02),       # in the plane, just outside the unit circle
     "azim": -40.0,

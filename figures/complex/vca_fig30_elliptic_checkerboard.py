@@ -38,6 +38,28 @@ CLAIM = (
     "six steps: M^6 = id."
 )
 
+EXPOSITION = """
+Chapter 3, "Mobius Transformations and Inversion," reaches its
+classification theorem by conjugating an arbitrary Mobius map M to its
+normal form: send its two fixed points to 0 and infinity, and M becomes
+the elementary map w -> m w for a complex multiplier m. Needham's
+qualitative taxonomy -- elliptic when |m| = 1, hyperbolic when m is
+real, loxodromic otherwise -- turns on nothing but that one number, and
+his own figure at this point in the book works the elliptic case in
+full: fixed points at +-1, a bipolar coordinate net built by pulling a
+log-polar grid back through the conjugating map, and one cell of that
+net followed around its orbit under repeated application of M. Because
+m = e^{i pi/3} here, the orbit closes after exactly six steps -- M^6 is
+the identity -- and the whole net rotates rigidly along the invariant
+(Apollonian) circles threading the two poles, the picture Needham uses
+to make "elliptic" mean something more concrete than "|m| = 1."
+
+This figure is a direct recreation of that page: the same bipolar net,
+the same six-cell orbit rendered as a checkerboard, and the pi/3 advance
+angle drawn at the fixed point it rotates about, so M^6 = id is a count
+of drawn cells rather than a fact taken on the multiplier's word alone.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

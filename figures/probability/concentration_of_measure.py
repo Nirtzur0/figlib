@@ -37,6 +37,24 @@ CLAIM = (
     "the mode of p and the location of a typical sample pull apart."
 )
 
+EXPOSITION = """
+High-dimensional probability keeps producing facts that contradict
+low-dimensional intuition, and Vershynin's treatment of Gaussian
+concentration is the cleanest example: the density of X ~ N(0, I_d) is
+strictly maximized at the origin, yet almost no sample from that same
+distribution ever lands near the origin. The resolution is that probability
+mass is density times volume, and in high dimensions the volume of a thin
+shell at radius r grows like r^{d-1} -- a factor that vanishes at r = 0 and
+overwhelms the density's own peak everywhere else, so the mass concentrates
+on a shell near r = sqrt(d) while the mode of the density sits in a region
+the mass essentially never visits. A reader needs this picture, not just
+the chi-distribution formula, to internalize why "most probable point" and
+"typical sample" stop being synonyms once the dimension is large -- and the
+same mechanism, density times volume, is exactly what makes a language
+model's highest-probability output different from the sequence a sampler
+actually draws.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 

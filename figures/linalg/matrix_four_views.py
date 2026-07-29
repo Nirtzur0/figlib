@@ -26,6 +26,24 @@ CLAIM = (
     "matching row of B."
 )
 
+EXPOSITION = """
+Strang's point is that a matrix product is not one operation with one
+correct way to compute it -- it has (at least) four readings, and each
+reading makes a different fact about the product obvious. Read AB
+entry by entry (row of A dot column of B) and you get a number at a
+time, with no structure. Read B's columns as things A acts on, and AB's
+columns are combinations of A's columns. Read A's rows as things acting
+on B, and AB's rows are combinations of B's rows. But read A by its
+columns AND B by its rows together, pairing column k of A with row k of
+B, and the product becomes a SUM of rank-1 matrices, one per pairing --
+a fact invisible from the entry-by-entry view and not derivable from
+either one-sided reading alone. Which reading to reach for is not a
+matter of taste: the column-times-row reading is the one that explains
+why low-rank matrices decompose the way they do, why outer-product
+updates work, and why a matrix product can be built up term by term
+instead of computed all at once.
+"""
+
 THEME = RISO
 FORMAT = WIDE
 
