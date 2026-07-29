@@ -1321,13 +1321,15 @@ AUTO_PAD_PX: XY = (26.0, 22.0)
 
 def auto_size(latex: str, scale: float, size_pt: float = 11.0,
               pad_px: XY = AUTO_PAD_PX,
-              min_size: XY = (0.0, 0.0)) -> tuple[float, float]:
+              min_size: XY = (0.0, 0.0),
+              register: str | None = None) -> tuple[float, float]:
     """(width, height) in MATH units for a box holding `latex` with padding.
 
     `scale` is px per math unit (`px_per_unit`). `min_size` is what makes a
     column of boxes uniform: size each label, take the max, pass it back in.
+    `register` must be the label's own — a mono run is ~20% wider.
     """
-    w_px, h_px = label_extent_px(latex, size_pt)
+    w_px, h_px = label_extent_px(latex, size_pt, register)
     return (max((w_px + float(pad_px[0])) / scale, float(min_size[0])),
             max((h_px + float(pad_px[1])) / scale, float(min_size[1])))
 
@@ -1336,9 +1338,13 @@ def auto_node(key: str, center: XY, label: str, *, scale: float,
               size_pt: float = 11.0, pad_px: XY = AUTO_PAD_PX,
               min_size: XY = (0.0, 0.0), **kw) -> Node:
     """`Node` whose size is `auto_size(label, ...)`; everything else passes
-    through. `label_size_pt` in **kw is honored for the measurement too."""
+    through. `label_size_pt` and `label_register` in **kw are honored for
+    the measurement too — a box sized registerless around a mono label is
+    ~20% narrow, and `label_overflow` would then flag a node the author
+    never mis-sized."""
     pt = kw.get("label_size_pt") or size_pt
-    w, h = auto_size(label, scale, pt, pad_px, min_size)
+    w, h = auto_size(label, scale, pt, pad_px, min_size,
+                     kw.get("label_register"))
     return Node(key, center, w, h, label=label, **kw)
 
 

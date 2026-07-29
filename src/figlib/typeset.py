@@ -37,18 +37,50 @@ def _stroke_outside_symbols(el: ET.Element, color: str, width: float) -> None:
 # token strip CLAIMS to be.
 _REGISTERS = {"mono": r"\mathtt", "sans": r"\mathsf"}
 
+# Latex machinery: a character whose meaning is structural, so it has no
+# per-character register. `\mathtt{^}` is not "a monospace caret", it is a
+# syntax error waiting to render as garbage.
+_MACHINERY = frozenset(r"\{}^_$&#%~")
+
 
 def apply_register(latex: str, register: str | None) -> str:
-    """Wrap `latex` in the register's font command. Apply this at EVERY
-    point a label is measured or drawn — the mechanical gate's boxes are
-    only on the ink if measurement and drawing typeset the same string."""
+    """Set `latex` in the register's typeface, ONE CHARACTER AT A TIME.
+
+    Per atom, not per string, and that is not a style choice: ziamath's
+    font commands reach exactly one atom, so `\\mathtt{tok}` silently
+    typesets `tok` in serif italic — identical glyphs to no command at
+    all. `\\mathtt{t}\\mathtt{o}\\mathtt{k}` is what actually switches the
+    font. (`\\texttt` changes glyphs but does not monospace them, so it is
+    not the fix either.) The residual inter-atom math spacing is the price.
+
+    A register is therefore only defined on a LITERAL CHARACTER RUN — a
+    token, a word, a filename. Anything containing latex machinery
+    (backslash, braces, `^`, `_`, `$`, `&`, `#`, `%`, `~`) raises: a
+    control sequence has no per-character reading, and mathematics is
+    already the default register. Digits and punctuation pass through
+    wrapped but unstyled, because STIX has no monospace digit reachable
+    this way; letters carry the signal. A space becomes `\\ `.
+
+    Apply this at EVERY point a label is measured or drawn — the
+    mechanical gate's boxes are only on the ink if measurement and drawing
+    typeset the same string, and a mono run is ~20% wider than the serif
+    measurement of the same characters.
+    """
     if register is None:
         return latex
     try:
         cmd = _REGISTERS[register]
     except KeyError:
         raise ValueError(f"unknown register {register!r}; have {sorted(_REGISTERS)}")
-    return f"{cmd}{{{latex}}}"
+    bad = sorted(set(latex) & _MACHINERY)
+    if bad:
+        raise ValueError(
+            f"cannot set {latex!r} in register {register!r}: it contains "
+            f"{bad}, and this is a PER-CHARACTER register defined only on a "
+            f"literal character run. Fix: drop the register — mathematics is "
+            f"the default register — or split the label so the literal run "
+            f"carries the register by itself.")
+    return "".join("\\ " if c == " " else f"{cmd}{{{c}}}" for c in latex)
 
 
 @dataclass(frozen=True)
