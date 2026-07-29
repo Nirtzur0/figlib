@@ -103,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
                          "coords are MATH coords for a single scene, figure "
                          "canvas px for a multi-panel figure; :SCALE upsamples "
                          "the crop (nearest) for inspection")
+    ap.add_argument("--gallery", action="store_true",
+                    help="regenerate figures/out/GALLERY.md from program metadata")
     ap.add_argument("--regress", action="store_true",
                     help="sweep the corpus: re-render every figure and diff "
                          "against the committed SVG; nonzero on drift/error")
@@ -112,6 +114,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="corpus root for --regress/--update (default: figures)")
     args = ap.parse_args(argv)
 
+    if args.gallery:
+        from pathlib import Path
+
+        from .gallery import write_gallery
+        print(f"gallery: {write_gallery(Path(args.figures_dir))}")
+        return 0
     if args.regress or args.update:
         return _regress_main(args)
     if len(args.program) != 1:
