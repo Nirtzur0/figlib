@@ -372,3 +372,49 @@ debugging class in the builder transcripts.
   after a fresh read, never Write-rewrites. If pytest fails but a
   direct run passes: rerun once (mid-edit state), then check SVG
   namespacing, before any cache theory.
+
+## Matrices (landed; invisible to the VCA survey)
+
+The evidence base for this document was Needham, and Needham has no
+matrices — so the largest gap for a machine-learning corpus was never
+counted. `matrix.py` closes it, sourced from Hiranabe's *The Art of Linear
+Algebra* (graphic notes on Strang), whose grammar turns out to be small
+and orthogonal in exactly the way the doctrine above predicts: one
+rectangle with four readings, and every factorization reducing to a sum
+of rank-1 rectangles.
+
+**The line the module had to justify.** `dft_matrix_basis` addresses an
+8×8 grid with a two-line `center` closure and needs nothing from here —
+correctly, because addressing is cheap to rewrite and the doctrine says
+absorb verbosity. (An earlier `CellGrid` design was cut for exactly this
+reason; `map_into`, `edge`, `grid_lines` and `brackets` went with it,
+having no consumer.) What is *not* cheap to rewrite is the gating.
+`check_expr` evaluates a drawn factorization in numpy and `check_conformable`
+reads inner dimensions off the drawn term list; neither can live inside
+one figure, because a gate is the shared oracle. Both need shape and
+values to be one object surviving `compute()` → `assertions()`. **The
+test for a new module is not "is this device inexpressible" but "does
+this make a new class of claim checkable".**
+
+**Shape is the thing to make geometric.** Drawing a matrix at its own
+aspect ratio is not stylistic: it is what makes a non-conformable product
+undrawable and lets the picture be *proved* rather than trusted. A figure
+that merely arranges rectangles cannot be gated at all.
+
+**Two marks cost a rewrite each, both for the same reason — the mark
+asserted something the data did not.** `rank1` first painted one column
+and one row of the *result* block; but the summand is the whole
+rectangle, not that cross, so the mark was false. It now draws what rank
+1 means — every column is `u` scaled by `v[j]` — which is true, and
+differs per summand. And `svd_low_rank` first drew a noisy causal
+attention map, which is *not* low rank (rank 4 kept 62%), so its CLAIM
+was false; a Gaussian Gram matrix is (99.7%), and an assertion now pins
+that so the claim cannot rot.
+
+Still open, deliberately deferred: **einsum / tensor-network diagrams**
+(Penrose notation). A tensor has legs, not a 2-D shape to draw to scale,
+so it belongs on `schematic.py` as named nodes with contracted edges —
+forcing it into `Block` would corrupt the shape-is-geometry invariant.
+References: *An introduction to graphical tensor notation for mechanistic
+interpretability* (arXiv 2402.01790) and *Named Tensor Notation* (arXiv
+2102.13196).

@@ -124,6 +124,8 @@ scratch. Each of these passed the full gate stack.
 | series / partial-sum geometry | `fig09_exp_series_spiral.py` |
 | rails + typed paths (circuits idiom) | `induction_head_circuit.py` |
 | ranked node/edge schematic, main path as a spine | `schematic_transformer_block.py` |
+| matrix structure: four readings, a product as a sum of rank-1 | `matrix_four_views.py` |
+| matrix values: heatmap row + signed Hinton, low-rank truncation | `svd_low_rank.py` |
 
 ## 3D idioms (surface3d)
 

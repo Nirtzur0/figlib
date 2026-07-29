@@ -1,5 +1,29 @@
 # Matrix Layer Implementation Plan
 
+> **STATUS: EXECUTED** (all 8 tasks). Kept as the record of intent; the
+> code is the truth. Deltas from the plan as written, each with its
+> reason:
+>
+> - **The CellGrid merge was withdrawn.** The signals plan finished
+>   without building `matrix.py`; `dft_matrix_basis` does its cell
+>   geometry inline and argues the case in its docstring. With no
+>   consumer left, `aspect`, `map_into`, `edge`, `grid_lines`,
+>   `brackets`, `cell_fills` and `check_square_cells` were cut rather
+>   than shipped speculatively. `cell` is scalar again, so
+>   shape-as-aspect-ratio is unconditional. `diagonal(b, offset, wrap)`
+>   was kept — circulant wrap is real index arithmetic.
+> - **`rank1` was rewritten.** As specced it painted one column and one
+>   row of the result block, which is false: the summand is the whole
+>   rectangle. It now takes the generating vectors and draws every column
+>   as `u` scaled by `v[j]`.
+> - **`svd_low_rank` changed object twice.** A causal softmax attention
+>   map is not low rank, so the CLAIM was false; it is a Gaussian Gram
+>   matrix, with an assertion pinning the energy so the claim cannot rot.
+>   The row is `K = sum_k sigma_k u_k v_k^T + R`, not `K_4 = sum_k` —
+>   readback-driven, so the approximation is visible rather than trusted.
+> - **Both figures gained readback-driven fixes**; see the `.readback.md`
+>   records for what was fixed and what was accepted.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add `src/figlib/matrix.py` — matrices and matrix operations as drawable, gateable scene items — plus two benchmark figures.

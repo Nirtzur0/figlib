@@ -19,6 +19,8 @@ WRITING A FIGURE
     builders    compute-side emitters (grids, streamlines, level ladders)
     plots       data plots as scene items: Axes, scales, series, bands
     schematic   Class B: typed Node/Port/Edge + a ranked layout pass
+    matrix      matrices as Blocks drawn at their own aspect ratio;
+                structure/value encoders, the expression row, shape gates
     surface3d   orthographic 3D -> depth-tagged 2D items; compose(), label3()
     sphere3d    sphere-specific producers for surface3d.compose()
     shading     chromatic light->shadow ramps in OKLCh
