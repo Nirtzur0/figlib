@@ -122,7 +122,7 @@ def _panel(g, omega_s: float | None) -> Scene:
     comb = [c for c in _centers(omega_s, 0.0, w)]
     s.items += impulses(comb, [p["comb_h"]] * len(comb), role=Role.ACCENT2,
                         width_scale=0.9)
-    s.add(MathLabel(r"\tfrac{1}{T}", (omega_s, p["comb_h"]),
+    s.add(MathLabel(r"S(j\omega)", (omega_s, p["comb_h"]),
                     role=Role.ACCENT2, ha="center", va="bottom",
                     offset_px=(0, -4)))
     s.add(MathLabel(r"\omega_s", (omega_s, 0.0), role=Role.ANNOTATION,
@@ -135,8 +135,8 @@ def _panel(g, omega_s: float | None) -> Scene:
         h = p["lpf_h"]
         s.add(Curve(np.array([[-wc, 0], [-wc, h], [wc, h], [wc, 0]]),
                     role=Role.CONSTRUCTION, dash="dashed"))
-        s.add(MathLabel(r"T", (-wc, h), role=Role.CONSTRUCTION,
-                        ha="right", va="bottom", offset_px=(-5, -2)))
+        s.add(MathLabel(r"H_r(j\omega)", (0.0, h), role=Role.CONSTRUCTION,
+                        ha="center", va="bottom", offset_px=(0, -3)))
     else:
         for x, y in _overlaps(omega_s, om, w, p["n_band"]):
             s.add(band(x, np.zeros_like(x), y, role=Role.ACCENT1,

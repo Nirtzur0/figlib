@@ -106,10 +106,13 @@ def _plane(g) -> Scene:
                     ha="left", va="top", offset_px=(6, 8)))
     s.add(MathLabel(r"-1", (-1.0, 0.0), role=Role.ANNOTATION,
                     ha="right", va="top", offset_px=(-6, 8)))
-    # omega_0 is an ANGLE: draw it as one
-    s.add(AngleMark((0.0, 0.0), (1.0, 0.0), (q0.real, q0.imag), radius=0.22))
-    s.add(MathLabel(r"\omega_0", (0.3 * np.cos(p["omega0"] / 2),
-                                  0.3 * np.sin(p["omega0"] / 2)),
+    # omega_0 is an ANGLE: draw the radius it opens to, then the arc,
+    # so the arc visibly ends on e^{j omega_0}, not on the pole
+    s.add(Curve(np.array([[0.0, 0.0], [q0.real, q0.imag]]),
+                role=Role.CONSTRUCTION, dash="dashed", width_scale=0.7))
+    s.add(AngleMark((0.0, 0.0), (1.0, 0.0), (q0.real, q0.imag), radius=0.3))
+    s.add(MathLabel(r"\omega_0", (0.44 * np.cos(0.72 * p["omega0"]),
+                                  0.44 * np.sin(0.72 * p["omega0"])),
                     role=Role.ANNOTATION, ha="left", va="bottom",
                     offset_px=(1, -1)))
     # the mechanism, on the figure, in the space under the circle
