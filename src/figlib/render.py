@@ -21,6 +21,10 @@ from .typeset import draw_math, render_math
 
 SVG_NS = "http://www.w3.org/2000/svg"
 
+# PNG raster scale: png px = canvas px * PNG_SCALE. Anything converting
+# between the two frames (figcheck --zoom) must use this, not a literal.
+PNG_SCALE = 2.0
+
 
 def _fmt(v: float) -> str:
     return f"{v:.2f}"
@@ -290,14 +294,41 @@ def _gray_ramp(t: float) -> str:
     return f"#{g:02x}{g:02x}{g:02x}"
 
 
-def _raster_datauri(it: RasterField, style: Style) -> str:
-    """values -> normalized [0,1] -> 256-level ramp LUT -> RGBA PNG."""
+def _rgb_datauri(rgb: "np.ndarray", interp: bool) -> str:
+    """(H, W, 3) uint8 -> opaque RGBA PNG data URI, with the same
+    nearest-neighbor upsample the scalar path uses when interp is off."""
     import base64
     import io
 
     from PIL import Image
 
+    if not interp:
+        # rasterizers that ignore image-rendering:pixelated (cairosvg) still
+        # show the cell grid
+        k = max(1, min(8, 2048 // max(rgb.shape[:2])))
+        rgb = np.repeat(np.repeat(rgb, k, axis=0), k, axis=1)
+    rgba = np.dstack([rgb, np.full(rgb.shape[:2], 255, dtype=np.uint8)])
+    buf = io.BytesIO()
+    Image.fromarray(rgba, "RGBA").save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _raster_datauri(it: RasterField, style: Style) -> str:
+    """values -> normalized [0,1] -> 256-level ramp LUT -> RGBA PNG.
+
+    An (H, W, 3) `values` array skips all of that: those pixels are already
+    colors, because the field's value was never a scalar. That is the case
+    for a cyclic channel — phase is periodic, so no monotone ramp can carry
+    it and `theme.phase` resolves the color itself, per pixel.
+    """
     v = np.asarray(it.values, dtype=float)
+    if v.ndim == 3:
+        if v.shape[2] != 3:
+            raise ValueError(
+                f"RasterField values with ndim 3 must be (H, W, 3) sRGB in "
+                f"[0, 1]; got shape {v.shape}")
+        return _rgb_datauri(np.round(np.clip(v, 0.0, 1.0) * 255).astype(np.uint8),
+                            it.interp)
     vmin = it.vmin if it.vmin is not None else float(np.nanmin(v))
     vmax = it.vmax if it.vmax is not None else float(np.nanmax(v))
     span = (vmax - vmin) or 1.0
@@ -305,15 +336,7 @@ def _raster_datauri(it: RasterField, style: Style) -> str:
     ramp = it.ramp or getattr(style, "ramp", None) or _gray_ramp
     lut = np.array([_hex_rgb(ramp(k / 255.0)) for k in range(256)], dtype=np.uint8)
     idx = np.round(t01 * 255.0).astype(np.uint8)
-    if not it.interp:
-        # nearest-neighbor upsample so rasterizers that ignore
-        # image-rendering:pixelated (cairosvg) still show the cell grid
-        k = max(1, min(8, 2048 // max(idx.shape)))
-        idx = np.repeat(np.repeat(idx, k, axis=0), k, axis=1)
-    rgba = np.dstack([lut[idx], np.full(idx.shape, 255, dtype=np.uint8)])
-    buf = io.BytesIO()
-    Image.fromarray(rgba, "RGBA").save(buf, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    return _rgb_datauri(lut[idx], it.interp)
 
 
 def _emit_clip(parent: ET.Element, scene: Scene, defs: ET.Element,
@@ -436,12 +459,13 @@ def _emit_items(parent: ET.Element, scene: Scene, style: Style, t: Transform,
         elif isinstance(it, Point):
             cx, cy = t.to_canvas(it.xy)
             ink = style.ink(it.role)
+            color = it.color or ink.color
             attrs = {"cx": _fmt(cx), "cy": _fmt(cy), "r": _fmt(style.point_radius * it.radius_scale)}
             if it.filled:
-                attrs["fill"] = ink.color
+                attrs["fill"] = color
             else:
                 attrs.update({"fill": "none" if transparent else style.background,
-                              "stroke": ink.color,
+                              "stroke": color,
                               "stroke-width": _fmt(ink.width)})
             ET.SubElement(root, "circle", attrs)
 
@@ -631,7 +655,7 @@ def figure_to_svg(fig: "Figure", style: Style = DEFAULT_STYLE, width_px: float =
 
 
 def save(scene: Scene, path_stem: str | Path, style: Style = DEFAULT_STYLE,
-         width_px: float = 900, png_scale: float = 2.0) -> tuple[Path, Path]:
+         width_px: float = 900, png_scale: float = PNG_SCALE) -> tuple[Path, Path]:
     import cairosvg
 
     stem = Path(path_stem)
@@ -645,7 +669,7 @@ def save(scene: Scene, path_stem: str | Path, style: Style = DEFAULT_STYLE,
 
 
 def save_figure(fig: "Figure", path_stem: str | Path, style: Style = DEFAULT_STYLE,
-                width_px: float = 900, png_scale: float = 2.0) -> tuple[Path, Path]:
+                width_px: float = 900, png_scale: float = PNG_SCALE) -> tuple[Path, Path]:
     import cairosvg
 
     stem = Path(path_stem)

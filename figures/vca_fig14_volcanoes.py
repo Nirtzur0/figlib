@@ -9,9 +9,10 @@ up to the nearest eruption.
 
 import numpy as np
 
-from figlib.scene import MathLabel, Scene, Vector
+from figlib.scene import Scene
 from figlib.style import Role
-from figlib.surface3d import Camera, compose, polyline_items, project, surface_items
+from figlib.surface3d import (Camera, as_floor, compose, label3,
+                              polyline_items, surface_items, vector3)
 from figlib.format import WIDE
 from figlib.theme import RISO
 
@@ -67,15 +68,13 @@ def build(g):
     h, m = g["h"], PARAMS["plane_margin"]
     s = Scene()
 
-    # base plane C, drawn as the deepest layer
+    # base plane C: paper-adjacent ground, theme-routed so it restyles
     plane3 = np.array([[-h - m, -h - m, 0], [h + m, -h - m, 0],
                        [h + m, h + m, 0], [-h - m, h + m, 0]], dtype=float)
-    plane_items = surface_items(
+    plane_items = as_floor(surface_items(
         plane3[:, 0].reshape(2, 2), plane3[:, 1].reshape(2, 2),
-        np.zeros((2, 2)), cam, dark="#e2d8c2", lite="#ece3d0",
-        edge="#c6bba6", edge_width=0.6)
-    # force the plane behind everything
-    plane_items = [(-1e9, it) for _, it in plane_items]
+        np.zeros((2, 2)), cam, dark=THEME.paper[1], lite=THEME.paper[0],
+        edge=THEME.ink(Role.MUTED).color, edge_width=0.6))
 
     surf = surface_items(g["X"], g["Y"], g["F"], cam,
                          shade=THEME.surface_shade, edge=THEME.surface_edge)
@@ -95,46 +94,42 @@ def build(g):
     s.items.extend(compose(plane_items, surf, trace, circle, poles))
 
     # axis arrows on the plane, outside the surface footprint
-    for tip3, tail3, latex, ha in (
-        ((h + m + 0.85, 0.0, 0.0), (h + 0.12, 0.0, 0.0), r"x = \mathrm{Re}\, z", "left"),
-        ((h + m + 0.28, -0.4, 0.0), (h + m + 0.28, -2.0, 0.0), r"\mathrm{Im}\, z", "left"),
+    for tail3, tip3, latex in (
+        ((h + 0.12, 0.0, 0.0), (h + m + 0.85, 0.0, 0.0), r"x = \mathrm{Re}\, z"),
+        ((h + m + 0.28, -2.0, 0.0), (h + m + 0.28, -0.4, 0.0), r"\mathrm{Im}\, z"),
     ):
-        (tail2, tip2), _ = project(np.array([tail3, tip3], dtype=float), cam)
-        s.add(Vector(tuple(tail2), tuple(tip2), role=Role.ANNOTATION, width_scale=0.9))
-        s.add(MathLabel(latex, tuple(tip2), ha=ha, va="center",
-                        offset_px=(8 if ha == "left" else -8, 4), role=Role.ANNOTATION))
+        s.add(vector3(tail3, tip3, cam, role=Role.ANNOTATION, width_scale=0.9))
+        s.add(label3(latex, tip3, cam, ha="left", va="center",
+                     offset_px=(8, 4), role=Role.ANNOTATION))
 
     # pole labels above the chimney tops
     for yy, latex in ((1.0, r"z = i"), (-1.0, r"z = -i")):
-        (top2,), _ = project(np.array([[0.0, yy, g["cap"] + 0.42]]), cam)
-        s.add(MathLabel(latex, tuple(top2), ha="center", va="bottom", offset_px=(0, -3)))
+        s.add(label3(latex, (0.0, yy, g["cap"] + 0.42), cam,
+                     ha="center", va="bottom", offset_px=(0, -3)))
 
     # the tranquil slice, named at its front end
-    (lab2,), _ = project(np.array([[1.45, 0.0, 0.0]]), cam)
-    s.add(MathLabel(r"y = \frac{1}{1+x^2}", tuple(lab2), ha="center", va="top",
-                    offset_px=(-10, 34), role=Role.ACCENT2))
+    slice_anchor = (1.45, 0.0, 0.0)
+    s.add(label3(r"y = \frac{1}{1+x^2}", slice_anchor, cam, ha="center",
+                 va="top", offset_px=(-10, 34), role=Role.ACCENT2))
 
     # the mechanism: R = 1 = distance from 0 to the poles
-    s.add(MathLabel(r"R = \mathrm{dist}(0, \pm i) = 1", tuple(lab2), ha="center", va="top",
-                    offset_px=(-10, 68), size_pt=10, role=Role.ANNOTATION))
+    s.add(label3(r"R = \mathrm{dist}(0, \pm i) = 1", slice_anchor, cam,
+                 ha="center", va="top", offset_px=(-10, 81), size_pt=10,
+                 role=Role.ANNOTATION))
 
     # the convergence circle, labeled where it crosses the front
-    (cl2,), _ = project(np.array([[0.72, -0.72, 0.75]]), cam)
-    s.add(MathLabel(r"|z| = 1", tuple(cl2), ha="left", va="top", offset_px=(16, 20),
-                    role=Role.ACCENT1))
+    s.add(label3(r"|z| = 1", (0.72, -0.72, 0.75), cam, ha="left", va="top",
+                 offset_px=(16, 20), role=Role.ACCENT1))
     # name the surface and admit the truncation
-    (sl2,), _ = project(np.array([[-2.0, 0.9, 0.55]]), cam)
-    s.add(MathLabel(r"\left|\tfrac{1}{1+z^2}\right|", tuple(sl2), ha="right",
-                    va="center", offset_px=(-78, -46), role=Role.ANNOTATION))
-    (tr2,), _ = project(np.array([[0.0, 1.0, g["cap"] + 0.42]]), cam)
-    s.add(MathLabel(r"(\text{spires truncated; poles are infinite})",
-                    (tr2[0], tr2[1]), ha="left", va="center", offset_px=(60, -4),
-                    size_pt=9, role=Role.ANNOTATION))
+    s.add(label3(r"\left|\tfrac{1}{1+z^2}\right|", (-2.0, 0.9, 0.55), cam,
+                 ha="right", va="center", offset_px=(-78, -46), role=Role.ANNOTATION))
+    s.add(label3(r"(\text{spires truncated; poles are infinite})",
+                 (0.0, 1.0, g["cap"] + 0.42), cam, ha="left", va="center",
+                 offset_px=(60, -4), size_pt=9, role=Role.ANNOTATION))
 
     # plane label
-    (c2,), _ = project(np.array([[h + m - 0.25, -h + 0.28, 0.0]]), cam)
-    s.add(MathLabel(r"\mathbb{C}", tuple(c2), ha="center", va="center",
-                    role=Role.ANNOTATION))
+    s.add(label3(r"\mathbb{C}", (h + m - 0.25, -h + 0.28, 0.0), cam,
+                 ha="center", va="center", role=Role.ANNOTATION))
     return s
 
 
@@ -155,5 +150,3 @@ def assertions(g):
         near = g["F"] > 0.95 * g["cap"]
         d = np.hypot(g["X"][near], g["Y"][near] - yy)
         assert d.min() < 0.12, f"no spire at z = {yy}i"
-    # the radius of convergence is the distance to the poles
-    assert abs(abs(1j) - 1.0) < 1e-15

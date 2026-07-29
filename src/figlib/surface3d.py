@@ -12,8 +12,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .geometry import cross2d
 from .scene import Curve, FilledCurve, MathLabel, Vector
-from .style import Role
+from .style import DEFAULT_STYLE, Role
 
 
 @dataclass(frozen=True)
@@ -138,7 +139,7 @@ def _depth_buffer(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, cam: Camera,
 
     def raster_tri(p0, p1, p2, z0, z1, z2):
         e1, e2 = p1 - p0, p2 - p0
-        area = e1[0] * e2[1] - e1[1] * e2[0]
+        area = float(cross2d(e1, e2))
         if abs(area) < 1e-15:
             return
         lo = np.minimum(np.minimum(p0, p1), p2)
@@ -152,9 +153,9 @@ def _depth_buffer(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, cam: Camera,
         cx = x0 + (np.arange(i0, i1) + 0.5) * cell
         cy = y0 + (np.arange(j0, j1) + 0.5) * cell
         gx, gy = np.meshgrid(cx, cy)
-        rx, ry = gx - p0[0], gy - p0[1]
-        w1 = (rx * e2[1] - ry * e2[0]) / area   # cross(r, e2) / cross(e1, e2)
-        w2 = (e1[0] * ry - e1[1] * rx) / area   # cross(e1, r) / cross(e1, e2)
+        r = np.stack([gx - p0[0], gy - p0[1]], axis=-1)
+        w1 = cross2d(r, e2) / area              # cross(r, e2) / cross(e1, e2)
+        w2 = cross2d(e1, r) / area              # cross(e1, r) / cross(e1, e2)
         w0 = 1.0 - w1 - w2
         eps = -0.05  # slight overdraw so edge cells are covered
         inside = (w0 >= eps) & (w1 >= eps) & (w2 >= eps)
@@ -215,10 +216,12 @@ def wireframe_items(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, cam: Camera,
             if not occluded[k]:
                 items.append((float(midd[k]) + depth_bias, Curve(seg, **curve_kw)))
             elif hidden is not None:
+                _, o_mult, w_mult = DEFAULT_STYLE.hidden_variant(
+                    curve_kw.get("role", Role.CONTENT))
                 kw = dict(curve_kw)
                 kw["dash"] = hidden
-                kw["opacity"] = kw.get("opacity", 1.0) * 0.85
-                kw["width_scale"] = kw.get("width_scale", 1.0) * 0.9
+                kw["opacity"] = kw.get("opacity", 1.0) * o_mult
+                kw["width_scale"] = kw.get("width_scale", 1.0) * w_mult
                 items.append((float(midd[k]), Curve(seg, **kw)))
 
     for i in lines(range(0, n, stride[0]), n):

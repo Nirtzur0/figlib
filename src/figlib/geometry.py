@@ -8,6 +8,28 @@ from __future__ import annotations
 import numpy as np
 
 
+def cross2d(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """z-component of the 2D cross product, broadcast over (..., 2) arrays.
+
+    numpy 2.x removed np.cross for 2-vectors; this is the replacement for
+    every inline `ax*by - ay*bx` site."""
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    return a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
+
+
+def point_in_poly(pt: tuple[float, float], poly: np.ndarray) -> bool:
+    """Even-odd ray cast: is pt inside the closed polygon (N, 2)?"""
+    x, y = float(pt[0]), float(pt[1])
+    p = np.asarray(poly, dtype=float)
+    x0, y0 = p[:, 0], p[:, 1]
+    x1, y1 = np.roll(x0, -1), np.roll(y0, -1)
+    crosses = (y0 > y) != (y1 > y)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        xi = x0 + (y - y0) / (y1 - y0) * (x1 - x0)
+    return bool(np.count_nonzero(crosses & (x < xi)) % 2)
+
+
 def exp_partial_sums(z: complex, n_terms: int) -> np.ndarray:
     """Cumulative partial sums S_0=0, S_{k+1}=S_k + z^k/k! as (n_terms+1, 2) points.
 

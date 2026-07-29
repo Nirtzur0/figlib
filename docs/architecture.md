@@ -20,14 +20,32 @@ Scene                 typed primitives in math coords, semantic Roles
 Theme                 appearance ONLY: paper, inks per Role, ramps,
   │                   categorical hues, surface shading, grain
   ▼
+autoplace             deterministic free-nudge solver: un-pinned labels
+  │                   move ≤ 24 px clear of collisions and the frame;
+  │                   the rest falls through to the gate
+  ▼
 render                SVG (+ PNG) — owns every bbox
   ▼
 gates                 numerical / mechanical / readback / comparative
 ```
 
+**Constructor vs. gate.** A check whose fix is computable gets promoted
+into the pipeline; a check that stays data-dependent stays a gate. The
+auto-place pass is the first promotion: the mechanical gate used to
+*compute* a verified collision-free nudge and print it for the model to
+type back in — now the same computation is applied before the gate
+measures, and gates + render see one solved scene. The gate still owns
+what the solver won't touch: pinned labels (`MathLabel.pin` — position
+that IS meaning), moves past the 24 px budget (a label that far from its
+anchor is a design defect, not a layout defect), and derived boxes
+(brace labels, callout boxes, panel tags). The second promotion is
+format derivation (see Sizing): undeclared `FORMAT` is solved from the
+annotation census, and the load gate's "larger Format" advice became a
+computed verdict instead of an assumption.
+
 **The invariant that keeps everything consistent:** content code never
 names a color, font, or stroke width. It names *meanings* — `Role.CONTENT`,
-`Role.ACCENT2`, `theme.ramp(t)`, `theme.categorical(i, n)`,
+`Role.ACCENT2`, `theme.ramp(t)`, `theme.categorical(i)`,
 `theme.surface_shade(t)`. Themes map meanings to appearance. Any figure
 re-renders under any theme; a theme change is a one-line edit that
 restyles the entire corpus.
@@ -50,13 +68,31 @@ Semantic channels a theme must provide (this is the whole interface):
 |---|---|---|
 | `ink(Role)` | line work by semantic role | content/construction/annotation |
 | `ramp(t)` | ordered quantity → color | level k, radius, height |
-| `categorical(i, n)` | correspondence hue | same ray before/after a map |
+| `categorical(i)` | correspondence hue | same ray before/after a map |
 | `surface_shade(t)` | 3D facet lighting → color | the volcano ramp |
 | `paper`, `grain` | ground and texture | riso cream + speckle |
 
 Rules: hue = correspondence, lightness = order, accent = the
 distinguished object, never decoration (see grammar.md). A theme changes
 *which* colors carry those channels, never *what* the channels mean.
+
+**Channels are tagged, so they can be gated.** `categorical()` / `ramp()` /
+`surface_shade()` return a `Hue` — a `str` subclass carrying its channel —
+so a color's provenance survives into the Scene and the color gate can hold
+each channel to its own standard: correspondence hues must be pairwise
+separable, an order ramp must be monotone in lightness, a shading ramp is
+exempt from contrast (its lit end is *meant* to approach the paper).
+A bare `'#rrggbb'` in a figure is ungated on the correspondence check, which
+is correct — it is not claiming to encode identity.
+
+**Correspondence slots are fixed, never interpolated.** `categorical(i)`
+indexes a fixed order; it does not take `n`. Interpolating `i/(n-1)` made a
+series' hue a function of how many series shared the figure, so the same
+object took different hues in two panels with different counts — breaking
+the one property the channel exists to carry — and shrank neighbour
+separation to ΔE 7.9 by n = 8. Past `theme.correspondence_cap` slots (4 for
+RISO, 3 for CLEAN — the all-pairs limit these palettes actually support)
+identity must ride a second channel: `Curve.dash`, facets, or a folded tail.
 
 ## Sizing (format.py)
 
@@ -71,10 +107,24 @@ Consequences enforced by the mechanical gate:
 - no label taller than 18% of the canvas (`label-scale`);
 - total label area under 22% of the canvas (`annotation-load`).
 
-When a gate fires, the fix is a larger Format or less annotation —
-**never smaller type.** Single-panel figures default to COLUMN;
-two-panel comparisons and dense 3D take WIDE; a wrapped side figure
-takes MARGIN and correspondingly less annotation.
+When a gate fires, the fix is **never smaller type** — but "larger
+Format" is not assumed to help, because the ladder mostly doesn't:
+MARGIN → COLUMN genuinely quarters the load fraction (same ink, 4× the
+canvas), while COLUMN → WIDE is near-invariant *by design* (WIDE's
+ink_scale 1.45 tracks its width ratio 1000/680 — reading-size parity,
+so canvas and ink grow together). The runner therefore *computes* the
+verdict: a load failure carries either `FORMAT = X would carry this
+load` or `no format carries this load — trim annotation`, evaluated
+per candidate (`format.smallest_carrier`).
+
+`FORMAT` is a declaration of the page slot — an external constraint,
+policed, never silently overridden. A program that declares none gets
+the derived format (`format.derive_format`): the smallest carrier at or
+above COLUMN, reported in the run notes. MARGIN is never derived —
+taking the margin slot is page-layout intent, not a sizing consequence.
+Single-panel figures default to COLUMN; two-panel comparisons and dense
+3D take WIDE; a wrapped side figure takes MARGIN and correspondingly
+less annotation.
 
 ## The three figure classes, one pipeline
 
@@ -85,12 +135,28 @@ takes MARGIN and correspondingly less annotation.
 - **Data plots** — a thin `plots.py` layer (axes, ticks, series) built
   ON the scene primitives, not beside them. An axis is Curves + Ticks +
   MathLabels; a series is a Curve with a categorical hue. No second
-  rendering path, so plots inherit theme + gates for free. (Not built
-  yet; build when the first real plot figure demands it.)
+  rendering path, so plots inherit theme + gates for free. (Built:
+  `Axes` owns the data→scene transform — log scales happen there, so
+  scene coords stay affine — with 1/2/5 and decade tick locators,
+  frame/grid furniture, line/band/scatter/hist emitters, xlabel/ylabel.
+  Axis titles sit outside the geometry extents by design: the figure
+  program reserves margin via scene lims, and the mechanical gate's
+  `clipped` check is what catches the miss.)
 - **Schematics (Class B)** — nodes, ports, edges with a layout pass;
   compute() is empty and layout is the content. Same scene, same theme,
-  same mechanical gate (label collisions matter most here). (Design
-  decided, build against the first Class B benchmark.)
+  same mechanical gate (label collisions matter most here). (Built:
+  `schematic.py`. Typed `Node`/`Port`/`Edge` with five edge kinds and a
+  chosen route — straight, one elbow, Bezier through stated via points.
+  The layout pass DERIVES three things and nothing else: the boundary
+  point where an edge attaches (`connect`/`trim_at_boundary` — edges
+  terminate ON boxes, never at centers), a box that holds its own typeset
+  label (`auto_node`), and a layered placement from a longest-path
+  ranking of the DAG (`RankLayout`/`rank_positions`, even spacing within
+  a rank, explicit lane and explicit position each winning locally). No
+  force-directed step, no packing, no crossing minimization — the graph
+  is *reported* by `crossings` / `clearance_violations` / `label_overflow`
+  and the figure program decides. Benchmarks: `induction_head_circuit`,
+  `schematic_transformer_block`.)
 
 The rule that keeps the architecture clean: **new capability enters as a
 producer of scene items, never as a new renderer.** surface3d proved the

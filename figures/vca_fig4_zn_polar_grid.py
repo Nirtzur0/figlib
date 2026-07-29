@@ -29,9 +29,13 @@ PARAMS = {
     "w_origin": 3.9,   # where the image panel sits
 }
 
-# viridis, 10 stops — hue encodes theta
+# Viridis, 10 stops — hue encodes theta. The upper four stops are darkened
+# into the visible band (hue held, lightness and chroma moved): stock viridis
+# runs to #dbc932, which is 1.69:1 on white, so the last rays of the fan were
+# drawn but not readable. Viridis's *hue* sequence is what carries theta here;
+# its lightness ramp is incidental, so compressing it costs nothing.
 RAY_COLORS = ["#440154", "#482878", "#3e4989", "#31688e", "#26828e",
-              "#1f9e89", "#35b779", "#6ece58", "#b5de2b", "#dbc932"]
+              "#1f9e89", "#30a76f", "#41a82a", "#7e9f0e", "#a59402"]
 
 
 def ray_color(i: int, n: int) -> str:

@@ -146,6 +146,27 @@ plateaus, because devices are *compositions*.
   automation is where over-constraint creeps in — keep style choices
   in the figure program where the model (and the grammar) can see them.
 
+## Continuous ink channels (landed; not in the original survey)
+
+The VCA inventory counts *marks*; what it cannot count is that every
+Curve attribute was a per-item scalar — nothing could vary along a
+stroke, and nothing could sit under one. Three channel families fix
+that, each general (a profile/callable, never a device):
+
+- **width_profile** on Curve: width multipliers interpolated along arc
+  length, rendered as a filled offset polygon. Tapered strokes, comet
+  trails, speed-encoded weight. Semantics: taper = motion/emphasis.
+- **ramp_segments** (builders): one polyline → n equal-arc-length
+  Curves whose color/opacity follow callables of t; butt caps so
+  translucent joints don't double-draw. Semantics: fade = time/decay,
+  hue-along-curve = an ordered coordinate.
+- **casing**: paper-colored under-strokes. `MathLabel.halo` keeps a
+  label legible on busy ink (never mutate shared glyph `<symbol>`s —
+  stroke the `<use>`); `Curve.casing` makes a curve read as passing
+  OVER earlier ink. Both skipped on transparent themes. This is the
+  channel that breaks the density–legibility tradeoff: annotation load
+  can rise without clarity falling.
+
 ## Build order
 
 1. Curve markers + line-style channel + open-arrow flag (one sitting;
@@ -162,3 +183,35 @@ Each step lands with a benchmark recreation that needs it (candidates:
 Fig [30] elliptic checkerboard → 1+2+4; Fig [19] stereographic
 projection → 3; a Ch12 flow-past-cylinder → 4) and passes the full gate
 stack including comparative judging.
+
+## Module-authoring rules (distilled from the capability-layer build)
+
+For anyone extending figlib itself. Each rule closed out a real
+debugging class in the builder transcripts.
+
+- **The `*_ink()` rule.** A new item whose ink is derived (not literal
+  points) ships ONE canvas-px resolver in render.py returning geometry
+  + any derived MathLabels; gates.py imports it. A gate that re-derives
+  geometry is a bug (this is how brace/callout/connector stay
+  drift-free between render and gate).
+- **Ink math is single-sourced in render.py.** A producer module that
+  needs it (figure.py needs arrowheads) imports lazily inside the
+  function. Never duplicate glyph geometry; never a module-level
+  back-import.
+- **Visibility predicates classify the boundary as visible (`>=`).**
+  Uniform resampling WILL land samples exactly on a silhouette; `>`
+  splits a fully-visible run into three.
+- **numpy 2.x dropped 2-D `np.cross`** — use `geometry.cross2d`.
+- **Rasterizer quirks registry** (the PNG is the figure of record):
+  cairosvg ignores `image-rendering: pixelated` (pre-upsample rasters
+  instead). Add new quirks here as found.
+- **Hidden-line styling comes from `style.hidden_variant(role)`**, not
+  local constants — the per-theme gate test keeps every hidden variant
+  above the contrast floor when palettes change.
+- **Tests assert SVG via `tests/svgkit.py`** (`tag()`, `find_by()`,
+  `path_cmd_counts()`) — never raw `e.tag`: ElementTree namespaces
+  every tag on parse, and that trap cost 30k tokens once.
+- **Parallel-agent hygiene.** Shared-file edits are targeted Edits
+  after a fresh read, never Write-rewrites. If pytest fails but a
+  direct run passes: rerun once (mid-edit state), then check SVG
+  namespacing, before any cache theory.

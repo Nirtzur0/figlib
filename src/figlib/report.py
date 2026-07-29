@@ -96,10 +96,13 @@ def _scene_section(scene: Scene, style: Style, t: Transform,
     boxes = _label_boxes(scene, style, t)
     out = [header, f"  canvas {t.canvas_w:.0f} x {t.canvas_h:.0f} px"]
     if ink is not None:
-        out.append(
-            f"  ink bbox {_fmt_box(ink)}  margins "
-            f"L{ink[0]:.0f} T{ink[1]:.0f} "
-            f"R{t.canvas_w - ink[2]:.0f} B{t.canvas_h - ink[3]:.0f}")
+        margins = (ink[0], ink[1], t.canvas_w - ink[2], t.canvas_h - ink[3])
+        pcts = (margins[0] / t.canvas_w, margins[1] / t.canvas_h,
+                margins[2] / t.canvas_w, margins[3] / t.canvas_h)
+        out.append(f"  ink bbox {_fmt_box(ink)}")
+        out.append("  content margins " + "  ".join(
+            f"{edge}{m:.0f}px ({p:.0%})"
+            for edge, m, p in zip("LTRB", margins, pcts)))
     out += ["  geometry (grouped):"] + [" " + l for l in geo]
     if boxes:
         area = sum((b[2] - b[0]) * (b[3] - b[1]) for _, _, b in boxes)
@@ -126,6 +129,31 @@ def figure_report(fig, style: Style, width_px: float) -> str:
             panel.scene, style, slot.transform,
             f"panel[{i}]{tag}  slot x{slot.x:.0f} y{slot.y:.0f} "
             f"w{slot.w:.0f} h{slot.h:.0f} (label coords panel-local)")
+    if fig.connectors:
+        out += ["connectors (figure canvas px):"]
+        for ci, conn in enumerate(fig.connectors):
+            ink = connector_ink(conn, lay, style)
+            pts = ([p for s in ink.strokes for p in s]
+                   + [p for h in ink.heads for p in h]
+                   + [p for poly in ink.hollow for p in poly])
+            glyph = None
+            for x, y in pts:
+                glyph = _union(glyph, (x, y, x, y))
+            src, dst = lay.slots[conn.src], lay.slots[conn.dst]
+            gap = max(dst.x - (src.x + src.w), src.x - (dst.x + dst.w),
+                      dst.y - (src.y + src.h), src.y - (dst.y + dst.h), 0.0)
+            line = (f"  [{ci}] {conn.kind} {conn.src}->{conn.dst}  "
+                    f"gap {gap:.0f}px")
+            if glyph is not None:
+                frames = [(s.x, s.y, s.x + s.w, s.y + s.h) for s in (src, dst)]
+                clear = min(_rect_gap(glyph, f) for f in frames)
+                line += (f"  glyph {_fmt_box(glyph)}  "
+                         f"frame clearance {clear:.0f}px")
+            out.append(line)
+            for lab in ink.labels:
+                out.append(f"    label '{lab.latex}' anchor "
+                           f"({lab.anchor[0]:.0f},{lab.anchor[1]:.0f}) "
+                           f"offset ({lab.offset_px[0]:+.0f},{lab.offset_px[1]:+.0f})")
     page: list[LabelBox] = [_canvas_label_box(lab, style) for lab in fig.page_items]
     for conn in fig.connectors:
         page += [_canvas_label_box(lab, style)

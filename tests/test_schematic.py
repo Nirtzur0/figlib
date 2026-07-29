@@ -1,0 +1,691 @@
+"""Class B: the layout pass on top of schematic.py's nodes/ports/edges.
+
+What is under test is the part that can be WRONG independently of taste:
+edges must terminate on box boundaries (not centers), a rank layout must
+produce boxes that do not overlap, an explicit position must beat the
+computed one, and an auto-sized box must actually contain its own typeset
+label. The benchmark figure's mechanical cleanliness is the integration
+test — layout is the content of a Class B figure, so a collision there is
+a content bug, not a cosmetic one.
+"""
+
+import numpy as np
+import pytest
+
+from figlib import schematic as sch
+from figlib.style import Role
+
+
+def _rects_overlap(a, b, pad=0.0):
+    return (a[0] - pad < b[2] and b[0] - pad < a[2]
+            and a[1] - pad < b[3] and b[1] - pad < a[3])
+
+
+# --- boundary attachment ----------------------------------------------------
+
+
+class TestBoundaryAttachment:
+    def test_connect_lands_on_boundaries_not_centers(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        b = sch.Node("b", (3.0, 0.0), 1.0, 0.6)
+
+        e = sch.connect(a, b, "map")
+
+        assert e.anchors[0] == pytest.approx((0.5, 0.0))
+        assert e.anchors[1] == pytest.approx((2.5, 0.0))
+        assert a.boundary_distance(e.anchors[0]) < 1e-12
+        assert b.boundary_distance(e.anchors[1]) < 1e-12
+        # and emphatically NOT the centers
+        assert np.hypot(*(np.subtract(e.anchors[0], a.center))) > 0.4
+
+    def test_diagonal_connect_exits_through_the_nearer_face(self):
+        a = sch.Node("a", (0.0, 0.0), 2.0, 0.4)   # wide and flat
+        b = sch.Node("b", (0.0, 3.0), 2.0, 0.4)
+
+        e = sch.connect(a, b, "map")
+
+        # straight up: leaves through the top face, at the top y
+        assert e.anchors[0] == pytest.approx((0.0, 0.2))
+        assert e.anchors[1] == pytest.approx((0.0, 2.8))
+
+    def test_curved_route_is_trimmed_back_to_the_boundary(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        b = sch.Node("b", (4.0, 0.0), 1.0, 0.6)
+
+        e = sch.connect(a, b, "map", route="quad", via=(2.0, 1.5))
+
+        assert a.boundary_distance(e.anchors[0]) < 1e-9
+        assert b.boundary_distance(e.anchors[1]) < 1e-9
+        # no drawn vertex sits strictly inside either box
+        for nd in (a, b):
+            interior = [p for p in e.pts if nd.boundary_distance(p) > 1e-9
+                        and nd.contains(p)]
+            assert not interior, f"{len(interior)} drawn points inside {nd.key}"
+
+    def test_explicit_port_overrides_the_computed_face(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        b = sch.Node("b", (3.0, 0.0), 1.0, 0.6)
+
+        e = sch.connect(a, b, "map", src_port="top", dst_port="bottom",
+                        route="elbow", corner="vh")
+
+        assert e.anchors[0] == pytest.approx(a.port("top"))
+        assert e.anchors[1] == pytest.approx(b.port("bottom"))
+
+    def test_boundary_toward_respects_pad(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        p = sch.boundary_toward(a, (5.0, 0.0), pad=0.1)
+        assert p == pytest.approx((0.6, 0.0))
+
+    def test_trim_drops_the_part_inside_the_box(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        # a polyline starting at the CENTER, walking out to the right
+        pts = np.array([[0.0, 0.0], [0.25, 0.0], [2.0, 0.0]])
+
+        out = sch.trim_at_boundary(pts, a, end="start")
+
+        assert out[0] == pytest.approx((0.5, 0.0))
+        assert out[-1] == pytest.approx((2.0, 0.0))
+        assert len(out) == 2                      # the interior vertices are gone
+        assert a.boundary_distance(out[0]) < 1e-12
+
+    def test_trim_at_the_far_end_is_symmetric(self):
+        a = sch.Node("a", (3.0, 0.0), 1.0, 0.6)
+        pts = np.array([[0.0, 0.0], [2.9, 0.0], [3.0, 0.0]])
+
+        out = sch.trim_at_boundary(pts, a, end="end")
+
+        assert out[-1] == pytest.approx((2.5, 0.0))
+        assert out[0] == pytest.approx((0.0, 0.0))
+
+    def test_trim_is_a_no_op_when_already_outside(self):
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        pts = np.array([[0.5, 0.0], [2.0, 0.0]])
+        assert np.allclose(sch.trim_at_boundary(pts, a, end="start"), pts)
+
+
+# --- ranking and layout -----------------------------------------------------
+
+
+class TestRanking:
+    def test_longest_path_ranks_a_chain(self):
+        r = sch.longest_path_ranks(["a", "b", "c"],
+                                   [("a", "b"), ("b", "c")])
+        assert r == {"a": 0, "b": 1, "c": 2}
+
+    def test_longest_path_not_shortest(self):
+        # a -> d directly AND a -> b -> c -> d: d sits at the LONG rank,
+        # otherwise the skip edge would have to run backwards
+        r = sch.longest_path_ranks(
+            ["a", "b", "c", "d"],
+            [("a", "b"), ("b", "c"), ("c", "d"), ("a", "d")])
+        assert r == {"a": 0, "b": 1, "c": 2, "d": 3}
+
+    def test_cycle_is_refused(self):
+        with pytest.raises(ValueError, match="cycle"):
+            sch.longest_path_ranks(["a", "b"], [("a", "b"), ("b", "a")])
+
+
+class TestRankLayout:
+    DAG = [("a", "b"), ("a", "c"), ("b", "d"), ("c", "d")]
+    KEYS = ["a", "b", "c", "d"]
+
+    def _boxes(self, pos, w=1.4, h=0.5):
+        return {k: (x - w / 2, y - h / 2, x + w / 2, y + h / 2)
+                for k, (x, y) in pos.items()}
+
+    def test_dag_boxes_are_distinct_and_disjoint(self):
+        lay = sch.RankLayout(rank_gap=1.2, lane_gap=2.0)
+        pos = sch.rank_positions(self.KEYS, layout=lay, dag=self.DAG)
+
+        assert len(set(pos.values())) == len(self.KEYS)
+        boxes = self._boxes(pos)
+        for i, ki in enumerate(self.KEYS):
+            for kj in self.KEYS[i + 1:]:
+                assert not _rects_overlap(boxes[ki], boxes[kj]), f"{ki}/{kj}"
+
+    def test_rank_sets_the_flow_axis_and_lanes_are_centered(self):
+        lay = sch.RankLayout(rank_gap=1.2, lane_gap=2.0)
+        pos = sch.rank_positions(self.KEYS, layout=lay, dag=self.DAG)
+
+        # vertical flow: rank -> y, evenly spaced
+        assert pos["a"][1] == pytest.approx(0.0)
+        assert pos["b"][1] == pytest.approx(1.2)
+        assert pos["c"][1] == pytest.approx(1.2)
+        assert pos["d"][1] == pytest.approx(2.4)
+        # a rank of one is centered; a rank of two straddles the axis evenly
+        assert pos["a"][0] == pytest.approx(0.0)
+        assert pos["d"][0] == pytest.approx(0.0)
+        assert pos["b"][0] == pytest.approx(-1.0)
+        assert pos["c"][0] == pytest.approx(+1.0)
+
+    def test_horizontal_axis_swaps_the_roles(self):
+        lay = sch.RankLayout(axis="horizontal", rank_gap=1.2, lane_gap=2.0)
+        pos = sch.rank_positions(self.KEYS, layout=lay, dag=self.DAG)
+        assert pos["d"][0] == pytest.approx(2.4)
+        assert pos["d"][1] == pytest.approx(0.0)
+
+    def test_explicit_lane_beats_even_spacing(self):
+        lay = sch.RankLayout(rank_gap=1.0, lane_gap=1.0)
+        pos = sch.rank_positions(self.KEYS, layout=lay, dag=self.DAG,
+                                 lanes={"b": 0, "c": 3})
+        assert pos["b"][0] == pytest.approx(0.0)
+        assert pos["c"][0] == pytest.approx(3.0)
+
+    def test_position_override_wins_over_rank_placement(self):
+        lay = sch.RankLayout(rank_gap=1.2, lane_gap=2.0)
+        base = sch.rank_positions(self.KEYS, layout=lay, dag=self.DAG)
+        pos = sch.rank_positions(self.KEYS, layout=lay, dag=self.DAG,
+                                 overrides={"d": (-7.5, 9.25)})
+
+        assert pos["d"] == pytest.approx((-7.5, 9.25))
+        assert base["d"] != pos["d"]
+        # and nothing else moved: the override is local, not a re-solve
+        for k in ("a", "b", "c"):
+            assert pos[k] == pytest.approx(base[k])
+
+    def test_explicit_ranks_are_used_verbatim(self):
+        lay = sch.RankLayout(rank_gap=1.0, lane_gap=1.0)
+        pos = sch.rank_positions(["a", "b"], layout=lay,
+                                 ranks={"a": 5, "b": 2})
+        assert pos["a"][1] == pytest.approx(5.0)
+        assert pos["b"][1] == pytest.approx(2.0)
+
+
+# --- auto-sizing from label metrics -----------------------------------------
+
+
+class TestAutoSize:
+    def test_auto_sized_box_contains_its_label_with_padding(self):
+        scale = 100.0     # px per math unit
+        latex = r"\text{Multi-Head Attention}"
+        w, h = sch.auto_size(latex, scale, size_pt=11.0)
+        lw, lh = sch.label_extent_px(latex, 11.0)
+
+        assert w * scale > lw and h * scale > lh
+        nd = sch.auto_node("mha", (0.0, 0.0), latex, scale=scale)
+        assert (nd.width, nd.height) == pytest.approx((w, h))
+        # the module's own honesty check agrees
+        assert sch.label_overflow([nd], scale, 11.0) == []
+
+    def test_min_size_gives_a_uniform_column(self):
+        scale = 100.0
+        labels = [r"\text{MLP}", r"\text{Multi-Head Attention}"]
+        sizes = [sch.auto_size(t, scale) for t in labels]
+        uniform = (max(w for w, _ in sizes), max(h for _, h in sizes))
+        nodes = [sch.auto_node(t, (0.0, float(i)), t, scale=scale,
+                               min_size=uniform)
+                 for i, t in enumerate(labels)]
+
+        assert nodes[0].width == pytest.approx(nodes[1].width)
+        assert sch.label_overflow(nodes, scale, 11.0) == []
+
+    def test_a_too_small_box_is_still_reported(self):
+        # auto-sizing is opt-in; a hand-stated box that lies still fails
+        nd = sch.Node("n", (0.0, 0.0), 0.2, 0.1, label=r"\text{LayerNorm}")
+        assert sch.label_overflow([nd], 100.0, 11.0)
+
+    def test_circle_node_is_round_and_holds_its_glyph(self):
+        nd = sch.circle_node("add", (0.0, 0.0), 0.26, label="+")
+        assert nd.width == pytest.approx(nd.height) == pytest.approx(0.52)
+        assert nd.radius == pytest.approx(0.26)
+        assert sch.label_overflow([nd], 100.0, 11.0) == []
+
+
+# --- assembly ---------------------------------------------------------------
+
+
+class TestAssemble:
+    def test_boxes_paint_over_edges_and_edge_labels_over_boxes(self):
+        from figlib.scene import Curve, FilledCurve, MathLabel
+
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6, label="a", fill="#ffffff")
+        b = sch.Node("b", (3.0, 0.0), 1.0, 0.6, label="b", fill="#ffffff")
+        e = sch.connect(a, b, "map", label=r"d")
+
+        out = sch.assemble([a, b], [e])
+        kinds = [type(it).__name__ for it in out]
+
+        i_edge = kinds.index("Curve")
+        i_box = min(i for i, it in enumerate(out)
+                    if isinstance(it, FilledCurve))
+        i_edge_label = max(i for i, it in enumerate(out)
+                           if isinstance(it, MathLabel) and it.latex == "d")
+        assert i_edge < i_box < i_edge_label
+
+    def test_under_and_over_bracket_the_body(self):
+        from figlib.scene import MathLabel
+
+        a = sch.Node("a", (0.0, 0.0), 1.0, 0.6)
+        rail = sch.rails([0.0], (-1.0, 1.0))
+        top = MathLabel("t", (0.0, 2.0))
+        out = sch.assemble([a], [], under=rail, over=[top])
+        assert out[0] is rail[0]
+        assert out[-1] is top
+
+
+# --- the benchmark figure ---------------------------------------------------
+
+
+class TestTransformerBlockBenchmark:
+    @staticmethod
+    def _load():
+        from pathlib import Path
+
+        from figlib.program import load_program
+        root = Path(__file__).resolve().parents[1]
+        return load_program(root / "figures" / "schematic_transformer_block.py")
+
+    def test_build_passes_the_mechanical_gate_with_zero_diagnostics(self):
+        from figlib.gates import mechanical
+
+        mod = self._load()
+        scene = mod.build(mod.compute(mod.PARAMS))
+        style = mod.THEME.scaled(mod.FORMAT.ink_scale)
+
+        diags = mechanical(scene, style, width_px=mod.FORMAT.display_width_px)
+        assert diags == [], "\n".join(f"{d.kind}: {d.detail}" for d in diags)
+
+    def test_numerical_assertions_hold(self):
+        mod = self._load()
+        mod.assertions(mod.compute(mod.PARAMS))
+
+    def test_the_spine_is_the_heaviest_ink_and_vertical(self):
+        mod = self._load()
+        g = mod.compute(mod.PARAMS)
+        spine = [e for e in g["edges"] if e.key.startswith("spine")]
+        branch = [e for e in g["edges"] if not e.key.startswith("spine")]
+
+        assert spine and branch
+        assert min(e.width_scale for e in spine) > max(e.width_scale for e in branch)
+        for e in spine:
+            assert np.allclose(e.pts[:, 0], e.pts[0, 0]), f"{e.key} is not vertical"
+            assert e.role is Role.CONTENT
+
+    def test_renders_under_riso(self, tmp_path):
+        from figlib.render import save
+        from figlib.theme import RISO
+
+        mod = self._load()
+        scene = mod.build(mod.compute(mod.PARAMS))
+        svg, png = save(scene, tmp_path / "block", RISO,
+                        width_px=mod.FORMAT.display_width_px)
+        assert svg.exists() and png.stat().st_size > 0
+
+
+# ===========================================================================
+# The core layer: ports, routing, edge-kind decoration, and the schematic
+# checks the induction-head benchmark asserts against.
+# ===========================================================================
+
+from figlib.scene import Curve, FilledCurve, MathLabel     # noqa: E402
+
+
+def _node(**kw):
+    kw.setdefault("key", "n")
+    kw.setdefault("center", (0.0, 0.0))
+    kw.setdefault("width", 2.0)
+    kw.setdefault("height", 1.0)
+    return sch.Node(**kw)
+
+
+class TestRoundedRect:
+    def test_square_corners_are_the_four_vertices(self):
+        pts = sch.rounded_rect((1.0, 2.0), 4.0, 2.0, radius=0.0)
+        assert sorted(map(tuple, pts)) == [(-1.0, 1.0), (-1.0, 3.0),
+                                           (3.0, 1.0), (3.0, 3.0)]
+
+    def test_rounded_outline_stays_inside_and_touches_every_side(self):
+        pts = sch.rounded_rect((0.0, 0.0), 4.0, 2.0, radius=0.5, n_arc=16)
+        assert np.max(np.abs(pts[:, 0])) == pytest.approx(2.0)
+        assert np.max(np.abs(pts[:, 1])) == pytest.approx(1.0)
+        assert np.all(np.abs(pts[:, 0]) <= 2.0 + 1e-12)
+        assert np.all(np.abs(pts[:, 1]) <= 1.0 + 1e-12)
+
+    def test_radius_clamps_to_half_the_short_side_giving_a_pill(self):
+        pts = sch.rounded_rect((0.0, 0.0), 4.0, 2.0, radius=99.0, n_arc=32)
+        # every point is exactly 1.0 from the spine segment y = 0, |x| <= 1
+        r = np.hypot(pts[:, 0] - np.clip(pts[:, 0], -1.0, 1.0), pts[:, 1])
+        assert np.allclose(r, 1.0)
+
+
+class TestPorts:
+    def test_the_four_side_midpoints(self):
+        n = _node(center=(1.0, 2.0), width=2.0, height=1.0)
+        assert n.port("left") == pytest.approx((0.0, 2.0))
+        assert n.port("right") == pytest.approx((2.0, 2.0))
+        assert n.port("bottom") == pytest.approx((1.0, 1.5))
+        assert n.port("top") == pytest.approx((1.0, 2.5))
+
+    def test_fractional_position_runs_low_to_high_on_every_side(self):
+        n = _node(center=(0.0, 0.0), width=4.0, height=2.0)
+        assert n.port("left@0.25") == pytest.approx((-2.0, -0.5))
+        assert n.port("right@0.75") == pytest.approx((2.0, 0.5))
+        assert n.port("bottom@0.25") == pytest.approx((-1.0, -1.0))
+        assert n.port("top@0.75") == pytest.approx((1.0, 1.0))
+
+    def test_tuple_spec_matches_string_spec(self):
+        assert _node().port(("left", 0.2)) == pytest.approx(_node().port("left@0.2"))
+
+    def test_endpoints_of_a_side_are_its_corners(self):
+        n = _node(center=(0.0, 0.0), width=4.0, height=2.0)
+        assert n.port("top@0") == pytest.approx((-2.0, 1.0))
+        assert n.port("top@1") == pytest.approx((2.0, 1.0))
+
+    def test_unknown_side_is_rejected(self):
+        with pytest.raises(ValueError):
+            _node().port("north")
+
+    def test_every_port_sits_on_the_boundary(self):
+        n = _node(center=(3.0, -1.0), width=1.7, height=0.9, corner=0.3)
+        for side in ("left", "right", "top", "bottom"):
+            for t in (0.0, 0.3, 0.5, 1.0):
+                assert n.boundary_distance(n.port((side, t))) < 1e-12
+
+    def test_boundary_distance_is_unsigned_inside_and_out(self):
+        n = _node(center=(0.0, 0.0), width=4.0, height=2.0)
+        assert n.boundary_distance((0.0, 0.0)) == pytest.approx(1.0)
+        assert n.boundary_distance((3.0, 0.0)) == pytest.approx(1.0)
+        assert n.boundary_distance((3.0, 2.0)) == pytest.approx(np.hypot(1.0, 1.0))
+        assert n.contains((1.9, 0.9)) and not n.contains((2.1, 0.0))
+        assert n.contains((2.1, 0.0), pad=0.2)
+
+
+class TestNodeItems:
+    def test_open_node_is_a_closed_curve_plus_its_centred_label(self):
+        n = _node(label="x", role=Role.ACCENT1)
+        outline, label = n.items()
+        assert isinstance(outline, Curve) and outline.closed
+        assert outline.role is Role.ACCENT1
+        assert isinstance(label, MathLabel)
+        assert label.anchor == n.center and label.ha == "center" and label.va == "center"
+
+    def test_filled_node_is_a_paper_filled_outlined_region(self):
+        body = _node(label="x", fill="#eeeeee").items()[0]
+        assert isinstance(body, FilledCurve)
+        assert body.color == "#eeeeee" and body.outline and body.opacity == 1.0
+
+    def test_unlabelled_node_emits_only_its_body(self):
+        assert len(_node().items()) == 1
+
+
+class TestRouting:
+    def test_straight_is_two_points(self):
+        assert sch.straight((0.0, 0.0), (3.0, 4.0)).shape == (2, 2)
+
+    def test_elbow_bends_once_and_stays_axis_aligned(self):
+        hv = sch.elbow((0.0, 0.0), (3.0, 4.0), "hv")
+        assert hv[1] == pytest.approx((3.0, 0.0))
+        vh = sch.elbow((0.0, 0.0), (3.0, 4.0), "vh")
+        assert vh[1] == pytest.approx((0.0, 4.0))
+        for pts in (hv, vh):
+            for a, b in zip(pts[:-1], pts[1:]):
+                assert abs(a[0] - b[0]) < 1e-12 or abs(a[1] - b[1]) < 1e-12
+
+    def test_elbow_takes_an_explicit_corner(self):
+        assert sch.elbow((0.0, 0.0), (3.0, 4.0), (1.0, 1.0))[1] == pytest.approx((1.0, 1.0))
+
+    def test_quad_passes_through_its_via_point(self):
+        p, q, via = (0.0, 0.0), (4.0, 0.0), (2.0, 3.0)
+        pts = sch.quad_through(p, q, via, n=101)
+        assert pts[0] == pytest.approx(p)
+        assert pts[-1] == pytest.approx(q)
+        assert pts[50] == pytest.approx(via)            # t = 1/2, by construction
+
+    def test_cubic_passes_through_both_via_points(self):
+        pts = sch.cubic_through((0.0, 0.0), (6.0, 0.0), (2.0, 2.0), (4.0, -2.0), n=97)
+        assert pts[32] == pytest.approx((2.0, 2.0))     # t = 1/3
+        assert pts[64] == pytest.approx((4.0, -2.0))    # t = 2/3
+
+    def test_route_pts_dispatch_and_its_errors(self):
+        assert len(sch.route_pts((0, 0), (1, 1), "elbow")) == 3
+        with pytest.raises(ValueError):
+            sch.route_pts((0, 0), (1, 1), "quad")
+        with pytest.raises(ValueError):
+            sch.route_pts((0, 0), (1, 1), "spline")
+
+    def test_edge_records_the_ports_it_was_given(self):
+        e = sch.edge((0.0, 0.0), (4.0, 0.0), "excite", route="quad", via=(2.0, 1.0))
+        assert e.anchors[0] == pytest.approx((0.0, 0.0))
+        assert e.anchors[1] == pytest.approx((4.0, 0.0))
+
+    def test_unknown_kind_is_rejected_at_construction(self):
+        with pytest.raises(ValueError):
+            sch.edge((0, 0), (1, 0), "inhibits")
+
+
+class TestDecorationPolicy:
+    """Each kind's visual identity, read back off the emitted Curve."""
+
+    def _e(self, kind, **kw):
+        return sch.edge((0.0, 0.0), (4.0, 0.0), kind, **kw)
+
+    def test_excite_is_a_solid_stroke_with_one_filled_head(self):
+        [c] = self._e("excite").items()
+        assert c.dash == "solid" and c.arrow_style == "filled" and c.arrows == (1.0,)
+
+    def test_inhibit_has_no_arrowhead_but_a_flat_terminal_bar(self):
+        stroke, bar = self._e("inhibit", bar_half=0.25).items()
+        assert stroke.arrows == ()
+        # perpendicular to the incoming direction, centred on the tip
+        assert bar.pts[:, 0] == pytest.approx([4.0, 4.0])
+        assert sorted(bar.pts[:, 1]) == pytest.approx([-0.25, 0.25])
+
+    def test_map_is_a_solid_stroke_with_a_hollow_head(self):
+        [c] = self._e("map").items()
+        assert c.arrow_style == "hollow" and c.arrows == (1.0,) and c.dash == "solid"
+
+    def test_attend_is_dashed_hollow_and_thinner(self):
+        [c] = self._e("attend").items()
+        assert c.dash == "dashed" and c.arrow_style == "hollow"
+        assert c.width_scale == pytest.approx(0.85)
+
+    def test_copy_stacks_two_filled_chevrons(self):
+        [c] = self._e("copy", chevron_gap=0.4).items()
+        assert c.arrow_style == "filled" and len(c.arrows) == 2
+        assert c.arrows[1] == pytest.approx(1.0)
+        assert c.arrows[0] == pytest.approx(1.0 - 0.4 / 4.0)
+
+    def test_chevron_spacing_is_a_fixed_distance_not_a_fixed_fraction(self):
+        """A fractional gap would drift to mid-curve on a long edge and read
+        as a waypoint rather than a doubled head."""
+        gap = 0.5
+        for length in (2.0, 20.0):
+            fr = sch.edge((0.0, 0.0), (length, 0.0), "copy",
+                          chevron_gap=gap).head_fractions()
+            assert (1.0 - fr[0]) * length == pytest.approx(gap)
+
+    def test_dash_override_beats_the_kind_policy(self):
+        assert self._e("copy", dash="dotted").items()[0].dash == "dotted"
+
+    def test_role_and_colour_pass_through_untouched(self):
+        [c] = self._e("excite", role=Role.ACCENT2, color="#123456",
+                      opacity=0.4).items()
+        assert c.role is Role.ACCENT2 and c.color == "#123456"
+        assert c.opacity == pytest.approx(0.4)
+
+    def test_edge_label_rides_the_curve_or_an_explicit_anchor(self):
+        e = sch.edge((0.0, 0.0), (4.0, 0.0), "excite", label="f", label_at=0.25)
+        assert e.items()[-1].anchor == pytest.approx((1.0, 0.0))
+        lab = sch.edge((0.0, 0.0), (4.0, 0.0), "excite", label="f",
+                       label_anchor=(9.0, 9.0), label_halo=True).items()[-1]
+        assert lab.anchor == (9.0, 9.0) and lab.halo
+
+    def test_every_kind_emits_curves_the_renderer_understands(self):
+        for kind in sch.EDGE_KINDS:
+            for it in self._e(kind).items():
+                assert isinstance(it, (Curve, MathLabel))
+                if isinstance(it, Curve):
+                    assert it.arrow_style in ("filled", "hollow")
+
+
+class TestRailsAndPlacement:
+    def test_vertical_rails_span_the_extent_as_construction_ink(self):
+        items = sch.rails([0.0, 1.0, 2.0], (-1.0, 3.0))
+        assert len(items) == 3
+        for c, x in zip(items, [0.0, 1.0, 2.0]):
+            assert isinstance(c, Curve) and c.role is Role.CONSTRUCTION
+            assert np.allclose(c.pts[:, 0], x)
+            assert c.pts[0, 1] == -1.0 and c.pts[1, 1] == 3.0
+
+    def test_horizontal_rails_swap_the_axes(self):
+        [c] = sch.rails([2.0], (0.0, 5.0), axis="horizontal")
+        assert np.allclose(c.pts[:, 1], 2.0)
+        assert c.pts[0, 0] == 0.0 and c.pts[1, 0] == 5.0
+
+    def test_headers_land_at_the_low_end_by_default(self):
+        items = sch.rails([0.0, 1.0], (-1.0, 3.0), labels=["a", "b"])
+        labels = items[2:]
+        assert len(items[:2]) == 2 and len(labels) == 2
+        assert all(isinstance(m, MathLabel) and m.va == "top" for m in labels)
+        assert [m.anchor for m in labels] == [(0.0, -1.0), (1.0, -1.0)]
+
+    def test_headers_can_go_to_the_high_end(self):
+        lab = sch.rails([0.0], (-1.0, 3.0), labels=["a"], label_end="high")[1]
+        assert lab.anchor == (0.0, 3.0) and lab.va == "bottom"
+
+    def test_bad_axis_is_rejected(self):
+        with pytest.raises(ValueError):
+            sch.rails([0.0], (0.0, 1.0), axis="diagonal")
+
+    def test_columns_and_rows_are_plain_affine(self):
+        assert sch.columns(4, 1.0, 2.5) == [1.0, 3.5, 6.0, 8.5]
+        assert sch.rows(3, -1.0, 0.5) == [-1.0, -0.5, 0.0]
+
+    def test_grid_maps_indices_to_centres(self):
+        g = sch.Grid(origin=(1.0, 2.0), dx=3.0, dy=-0.5)
+        assert g.center(0, 0) == (1.0, 2.0)
+        assert g.center(2, 3) == (7.0, 0.5)
+
+    def test_items_flattens_nodes_edges_and_raw_items(self):
+        n = _node(label="x")
+        e = sch.edge(n.port("right"), (5.0, 0.0), "excite")
+        extra = MathLabel("z", (0.0, 0.0))
+        out = sch.items([n], e, extra)
+        assert len(out) == 2 + 1 + 1 and out[-1] is extra
+
+
+class TestSchematicChecks:
+    def test_clearance_fires_when_an_edge_pierces_an_unrelated_box(self):
+        blocker = _node(key="blocker", center=(2.0, 0.0), width=1.0, height=1.0)
+        e = sch.edge((0.0, 0.0), (4.0, 0.0), "excite", key="through", n=64,
+                     route="quad", via=(2.0, 0.0))
+        bad = sch.clearance_violations([e], [blocker])
+        assert len(bad) == 1 and "blocker" in bad[0] and "through" in bad[0]
+
+    def test_no_violation_for_the_boxes_the_edge_attaches_to(self):
+        a = _node(key="a", center=(0.0, 0.0), width=1.0, height=1.0)
+        b = _node(key="b", center=(5.0, 0.0), width=1.0, height=1.0)
+        e = sch.edge(a.port("right"), b.port("left"), "excite", key="a->b")
+        assert sch.clearance_violations([e], [a, b]) == []
+
+    def test_pad_makes_the_clearance_check_stricter(self):
+        near = _node(key="near", center=(2.0, 0.6), width=1.0, height=1.0)
+        e = sch.edge((0.0, 0.0), (4.0, 0.0), "excite", key="e", n=64)
+        assert sch.clearance_violations([e], [near]) == []
+        assert len(sch.clearance_violations([e], [near], pad=0.2)) == 1
+
+    def test_port_offsets_measure_distance_to_the_nearest_boundary(self):
+        a = _node(key="a", center=(0.0, 0.0), width=2.0, height=1.0)
+        b = _node(key="b", center=(6.0, 0.0), width=2.0, height=1.0)
+        exact = sch.edge(a.port("right"), b.port("left"), "excite", key="exact")
+        loose = sch.edge(a.port("right"), (4.5, 0.0), "excite", key="loose")
+        assert sch.max_port_offset([exact], [a, b]) < 1e-12
+        assert sch.max_port_offset([loose], [a, b]) == pytest.approx(0.5)
+
+    def test_attached_nodes_reports_both_ends(self):
+        a = _node(key="a", center=(0.0, 0.0), width=2.0, height=1.0)
+        b = _node(key="b", center=(6.0, 0.0), width=2.0, height=1.0)
+        e = sch.edge(a.port("right"), b.port("left"), "excite")
+        assert sorted(sch.attached_nodes(e, [a, b], 1e-9)) == ["a", "b"]
+
+    def test_crossing_count_on_a_known_configuration(self):
+        x1 = sch.edge((0.0, 0.0), (2.0, 2.0), "excite", key="up")
+        x2 = sch.edge((0.0, 2.0), (2.0, 0.0), "excite", key="down")
+        par = sch.edge((0.0, 3.0), (2.0, 3.0), "excite", key="par")
+        assert sch.crossing_count([x1, x2]) == 1
+        (a, b, pt), = sch.crossings([x1, x2])
+        assert {a, b} == {"up", "down"} and pt == pytest.approx((1.0, 1.0))
+        assert sch.crossing_count([x1, par]) == 0
+        assert sch.crossing_count([x1, x2, par]) == 1
+
+    def test_edges_sharing_a_port_are_joined_not_crossed(self):
+        a = sch.edge((0.0, 0.0), (2.0, 2.0), "excite", key="a")
+        b = sch.edge((0.0, 0.0), (2.0, -2.0), "excite", key="b")
+        assert sch.crossing_count([a, b]) == 0
+
+    def test_a_curve_crossing_a_line_twice_counts_twice(self):
+        arc = sch.edge((0.0, 0.0), (4.0, 0.0), "excite", route="quad",
+                       via=(2.0, 2.0), n=201, key="arc")
+        line = sch.edge((-1.0, 1.0), (5.0, 1.0), "excite", key="line")
+        assert sch.crossing_count([arc, line]) == 2
+
+    def test_label_overflow_flags_a_label_wider_than_its_declared_box(self):
+        latex = r"\text{a very long node label indeed}"
+        w, h = sch.label_extent_px(latex, 11.0)
+        tight = _node(key="tight", width=w / 200.0, height=2 * h / 100.0, label=latex)
+        roomy = _node(key="roomy", width=2 * w / 100.0, height=2 * h / 100.0, label=latex)
+        bad = sch.label_overflow([tight, roomy], scale=100.0, size_pt=11.0)
+        assert len(bad) == 1 and bad[0].startswith("tight")
+
+    def test_px_per_unit_matches_the_real_transform(self):
+        from figlib.layout import Transform
+        from figlib.scene import Scene
+        t = Transform(Scene(xlim=(-1.0, 4.0), ylim=(0.0, 2.0)), width_px=600)
+        assert sch.px_per_unit((-1.0, 4.0), 600) == pytest.approx(t.scale_x)
+
+
+class TestPointAt:
+    def test_arc_length_fraction_on_an_L_shaped_polyline(self):
+        pts = np.array([[0.0, 0.0], [3.0, 0.0], [3.0, 1.0]])
+        assert sch.point_at(pts, 0.0) == pytest.approx((0.0, 0.0))
+        assert sch.point_at(pts, 0.5) == pytest.approx((2.0, 0.0))
+        assert sch.point_at(pts, 1.0) == pytest.approx((3.0, 1.0))
+
+    def test_degenerate_polyline_returns_its_only_point(self):
+        assert sch.point_at(np.array([[1.0, 2.0], [1.0, 2.0]]), 0.7) == pytest.approx((1.0, 2.0))
+
+
+class TestInductionHeadBenchmark:
+    @staticmethod
+    def _load():
+        from pathlib import Path
+
+        from figlib.program import load_program
+        root = Path(__file__).resolve().parents[1]
+        return load_program(root / "figures" / "induction_head_circuit.py")
+
+    def test_numerical_assertions_hold(self):
+        mod = self._load()
+        mod.assertions(mod.compute(mod.PARAMS))
+
+    def test_mechanical_and_colour_gates_are_clean(self):
+        from figlib.gates import color_gate, mechanical
+
+        mod = self._load()
+        scene = mod.build(mod.compute(mod.PARAMS))
+        style = mod.THEME.scaled(mod.FORMAT.ink_scale)
+        diags = (mechanical(scene, style, width_px=mod.FORMAT.display_width_px)
+                 + color_gate(scene, style))
+        assert diags == [], "\n".join(f"{d.kind}: {d.detail}" for d in diags)
+
+    def test_the_two_heads_are_separable_by_hue_and_by_decoration(self):
+        mod = self._load()
+        g = mod.compute(mod.PARAMS)
+        by_key = {e.key: e for e in g["edges"]}
+        prev = by_key[f"prev{g['earlier']}->{g['key_pos']}"]
+        assert prev.role is Role.ACCENT1
+        assert by_key["QK"].role is by_key["OV"].role is Role.ACCENT2
+        assert by_key["QK"].kind == "attend" and by_key["OV"].kind == "copy"
+        # the lookup is dashed and hollow-headed; the copies are solid chevrons
+        assert by_key["QK"].items()[0].dash == "dashed"
+        assert by_key["OV"].items()[0].dash == "solid"
+        assert len(by_key["OV"].items()[0].arrows) == 2
+
+    def test_the_ensemble_is_muted_and_exactly_one_write_is_accented(self):
+        mod = self._load()
+        g = mod.compute(mod.PARAMS)
+        writes = [e for e in g["edges"] if e.key.startswith("prev")]
+        assert len(writes) == len(g["tokens"]) - 1
+        assert sum(e.role is Role.ACCENT1 for e in writes) == 1
+        assert all(e.role is Role.MUTED for e in writes if e.role is not Role.ACCENT1)

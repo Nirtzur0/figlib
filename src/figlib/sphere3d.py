@@ -14,13 +14,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from .scene import Curve, FilledCurve
-from .style import Role
+from .style import DEFAULT_STYLE, Role
 from .surface3d import Camera, project
-
-# hidden runs step down toward the MUTED end of the ink hierarchy, but
-# stay above the faint-ink floor: dash is the primary hiddenness signal
-_HIDDEN_OPACITY = 0.85
-_HIDDEN_WIDTH = 0.9
 
 
 @dataclass(frozen=True)
@@ -98,8 +93,11 @@ def visibility_runs(pts3: np.ndarray, sphere: Sphere, cam: Camera,
 def _emit(runs: list[tuple[bool, np.ndarray]], cam: Camera, hidden: str | None,
           depth_bias: float, curve_kw: dict) -> list[tuple[float, Curve]]:
     """Runs -> depth-tagged curves; visible biased toward the viewer so they
-    beat a filled sphere disc, hidden restyled dashed/muted or dropped."""
+    beat a filled sphere disc, hidden restyled via Style.hidden_variant
+    (dash from the `hidden` arg, which overrides the variant's) or dropped."""
     items: list[tuple[float, Curve]] = []
+    _, o_mult, w_mult = DEFAULT_STYLE.hidden_variant(
+        curve_kw.get("role", Role.CONTENT))
     for visible, run in runs:
         pts2, depth = project(run, cam)
         if visible:
@@ -107,8 +105,8 @@ def _emit(runs: list[tuple[bool, np.ndarray]], cam: Camera, hidden: str | None,
         elif hidden is not None:
             kw = dict(curve_kw)
             kw["dash"] = hidden
-            kw["opacity"] = kw.get("opacity", 1.0) * _HIDDEN_OPACITY
-            kw["width_scale"] = kw.get("width_scale", 1.0) * _HIDDEN_WIDTH
+            kw["opacity"] = kw.get("opacity", 1.0) * o_mult
+            kw["width_scale"] = kw.get("width_scale", 1.0) * w_mult
             items.append((float(depth.mean()), Curve(pts2, **kw)))
     return items
 

@@ -12,6 +12,16 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 
+# Discrete stroke-weight levels for Curve.width_scale. A free scalar
+# drifts to 1.0 across a corpus and flattens the ink hierarchy; three
+# named levels keep the background-family / content / foreground-actor
+# contrast the grammar asks for (actor:bg > 3:1). Off-level values stay
+# legal — these are the defaults the eye is calibrated to, not a gate.
+WEIGHT_BG = 0.55       # background family: the population behind the claim
+WEIGHT_CONTENT = 1.0   # ordinary content ink
+WEIGHT_ACTOR = 1.8     # THE object: one distinguished member, not many
+
+
 class Role(Enum):
     CONTENT = auto()
     CONSTRUCTION = auto()
@@ -42,7 +52,8 @@ class Style:
     halo_width: float = 2.4
     # named dash levels: dash as identity, orthogonal to role
     dash_patterns: dict[str, str] = field(default_factory=lambda: {
-        "solid": "", "dashed": "6 4.5", "dotted": "0.1 4"})
+        "solid": "", "dashed": "6 4.5", "dotted": "0.1 4",
+        "fine-dashed": "4 3.5"})
     # cumulative scaled() factor; explicit per-item size_pt (authored in
     # reading-size points) multiplies through label_pt()
     type_scale: float = 1.0
@@ -56,10 +67,23 @@ class Style:
         return explicit * self.type_scale if explicit else self.label_size_pt
 
     def dash(self, spec: str) -> str | None:
-        """Resolve a semantic dash name or pass a raw dasharray through."""
+        """Resolve a semantic dash name, or scale a raw dasharray by
+        type_scale — named patterns scale through scaled(); raw specs must
+        not silently escape the same ink scaling."""
         if spec in self.dash_patterns:
             return self.dash_patterns[spec] or None
+        if self.type_scale != 1.0:
+            return " ".join(f"{float(v) * self.type_scale:g}"
+                            for v in spec.split()) or None
         return spec
+
+    def hidden_variant(self, role: Role) -> tuple[str, float, float]:
+        """(dash, opacity multiplier, width_scale multiplier) for a hidden
+        run of `role` ink — the single source for hidden-line styling. Dash
+        is the primary hiddenness signal; the multipliers step the ink
+        toward MUTED but must keep it above the stroke contrast floor
+        (asserted per theme in tests)."""
+        return ("dashed", 0.85, 0.9)
 
     def scaled(self, k: float) -> "Style":
         """Every absolute quantity — type, stroke, heads, dots, dash

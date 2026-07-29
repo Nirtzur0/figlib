@@ -12,6 +12,7 @@ from figlib.format import WIDE
 from figlib.geometry import cassinian_curves
 from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
+from figlib.theme import CLEAN
 
 CLAIM = (
     "The Cassinian curves |z-1||z+1| = k^2 with foci +-1 are exactly the "
@@ -19,6 +20,7 @@ CLAIM = (
     "k=1 lemniscate mapping to the circle through the origin."
 )
 
+THEME = CLEAN
 FORMAT = WIDE
 
 PARAMS = {
@@ -28,8 +30,17 @@ PARAMS = {
     "z_mark_t": 1.05,   # polar angle of the marked point z
 }
 
-LEVEL_COLORS = {0.7: "#9db8d9", 0.85: "#6f94c4", 1.0: "#d1495b",
-                1.2: "#41669f", 1.45: "#254a80"}
+# The level k is an ordered quantity -> the theme's ramp channel, floored
+# away from the light end so every stroke clears the ink-contrast gate
+# (CLEAN.ramp(0.45) is the lightest stop at >= 3:1 on white).
+RAMP_LO = 0.45
+
+
+def _level_color(k: float, ks: list[float]) -> str | None:
+    if k == 1.0:
+        return None            # the lemniscate is THE object: accent role, no override
+    t = (k - min(ks)) / (max(ks) - min(ks))
+    return THEME.ramp(RAMP_LO + (1.0 - RAMP_LO) * t)
 
 
 def compute(p):
@@ -64,7 +75,7 @@ def build(g):
         wsc = 1.25 if k == 1.0 else 0.95
         for loop in g["curves"][k]:
             s.add(Curve(loop, closed=True, role=role, width_scale=wsc,
-                        color=LEVEL_COLORS[k]))
+                        color=_level_color(k, g["ks"])))
     s.add(Point((-1.0, 0.0), role=Role.CONTENT))
     s.add(Point((1.0, 0.0), role=Role.CONTENT))
     s.add(MathLabel(r"-1", (-1.0, 0.0), ha="center", va="top", offset_px=(0, 9)))
@@ -87,7 +98,7 @@ def build(g):
     s.add(MathLabel(r"r_1 r_2 = k^2", (-2.15, 1.42), ha="left", va="center",
                     role=Role.ANNOTATION))
     s.add(MathLabel(r"(\text{each curve its own } k)", (-2.15, 1.42), ha="left", va="top",
-                    offset_px=(0, 10), size_pt=9, role=Role.ANNOTATION))
+                    offset_px=(0, 14), size_pt=9, role=Role.ANNOTATION))
     d1 = (z0.real + 1, z0.imag)
     d2 = (z0.real - 1, z0.imag)
     s.add(AngleMark((-1.0, 0.0), (1.0, 0.0), d1, radius=0.22))
@@ -113,7 +124,7 @@ def build(g):
         wsc = 1.25 if k == 1.0 else 0.95
         for seg in g["images"][k]:
             s.add(Curve(shift(seg), closed=True, role=role, width_scale=wsc,
-                        color=LEVEL_COLORS[k]))
+                        color=_level_color(k, g["ks"])))
     s.add(Point((W + 1.0, 0.0), role=Role.CONTENT))
     s.add(MathLabel(r"1", (W + 1.0, 0.0), ha="center", va="top", offset_px=(0, 9)))
     s.add(Point((W, 0.0), role=Role.CONTENT, radius_scale=0.7))

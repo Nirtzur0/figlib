@@ -81,6 +81,7 @@ class Point:
     role: Role = Role.CONTENT
     filled: bool = True
     radius_scale: float = 1.0
+    color: str | None = None       # fill/stroke override, same convention as Curve.color
 
 
 @dataclass
@@ -101,6 +102,9 @@ class MathLabel:
     # paper-colored casing behind the glyphs so the label stays legible on
     # busy ink (cartographic halo). Skipped on transparent themes.
     halo: bool = False
+    # this label's position IS meaning (e.g. text along a curve): the
+    # auto-place pass never moves it, collisions fall to the gate
+    pin: bool = False
 
 
 @dataclass
@@ -162,11 +166,22 @@ class Callout:
 
 @dataclass
 class RasterField:
-    """Dense scalar field embedded as an image — the honest encoding when
-    there is no vector substitute at the density (attention maps, loss
-    landscapes, PDE fields). values (H, W) are normalized over
-    [vmin, vmax] and mapped through ramp (default: the theme's ramp, else
-    gray); row 0 renders at the TOP of extent (y = y1)."""
+    """Dense field embedded as an image — the honest encoding when there is
+    no vector substitute at the density (attention maps, loss landscapes,
+    PDE fields). Row 0 renders at the TOP of extent (y = y1).
+
+    Two modes, told apart by ndim, because some fields have no scalar to
+    normalize:
+
+    - **(H, W) scalar** — normalized over [vmin, vmax] and mapped through
+      ramp (default: the theme's ramp, else gray).
+    - **(H, W, 3) sRGB in [0, 1]** — already color, drawn as given (clipped
+      to the cube); vmin/vmax/ramp do not apply. This is the mode a *cyclic*
+      channel needs: phase is periodic, so no monotone ramp can carry it and
+      the producer resolves color per pixel through `theme.phase`. Keeping
+      it on the same field means one item type, one renderer, one extent
+      rule — a new channel, not a new primitive.
+    """
     values: np.ndarray
     extent: tuple[float, float, float, float]   # (x0, x1, y0, y1)
     ramp: Callable[[float], str] | None = None

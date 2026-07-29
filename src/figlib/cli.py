@@ -15,21 +15,108 @@ from .program import run
 from .readback import prompt_for
 
 
+def _zoom_main(report, spec: str) -> None:
+    """--zoom x0,y0,x1,y1[:scale]: crop the rendered PNG around a math-coords
+    window (figure canvas px for multi-panel figures, whose math coords are
+    panel-local) and write it as <stem>.zoom.png. Replaces the hand-written
+    PIL crop dance."""
+    from PIL import Image
+
+    from .layout import Transform
+    from .render import PNG_SCALE
+    from .scene import Scene
+
+    scale = 1
+    if ":" in spec:
+        spec, s = spec.rsplit(":", 1)
+        scale = max(1, int(s))
+    x0, y0, x1, y1 = (float(v) for v in spec.split(","))
+    if isinstance(report.built, Scene):
+        t = Transform(report.built, width_px=report.width_px)
+        (cx0, cy0), (cx1, cy1) = t.to_canvas((x0, y1)), t.to_canvas((x1, y0))
+    else:  # Figure: coords are already figure canvas px (+y down)
+        (cx0, cy0), (cx1, cy1) = (x0, y0), (x1, y1)
+    with Image.open(report.png_path) as im:
+        box = (max(int(cx0 * PNG_SCALE), 0), max(int(cy0 * PNG_SCALE), 0),
+               min(int(cx1 * PNG_SCALE + 0.5), im.width),
+               min(int(cy1 * PNG_SCALE + 0.5), im.height))
+        if box[0] >= box[2] or box[1] >= box[3]:
+            print(f"zoom: window {spec} maps to an empty crop {box}")
+            return
+        crop = im.crop(box)
+        if scale > 1:
+            crop = crop.resize((crop.width * scale, crop.height * scale),
+                               Image.NEAREST)
+        out = report.png_path.with_name(report.png_path.stem + ".zoom.png")
+        crop.save(out)
+    print(f"zoom: {out}")
+
+
+def _regress_main(args) -> int:
+    """--regress / --update: the golden-figure harness over the corpus."""
+    from pathlib import Path
+
+    from .regress import discover_programs, sweep, update_baselines
+
+    figures_dir = Path(args.figures_dir)
+    out_dir = figures_dir / "out"
+    named = [Path(p) for p in args.program]
+    programs = named or discover_programs(figures_dir)
+
+    if args.update:
+        written = update_baselines(programs, out_dir)
+        for p in written:
+            print(f"UPDATED {p}")
+        print(f"\n{len(written)} baseline(s) refreshed in {out_dir}")
+        return 0
+
+    results = sweep(figures_dir, out_dir, programs=programs)
+    for r in results:
+        print(r.line())
+    bad = [r for r in results if not r.ok]
+    tally = {k: sum(r.status == k for r in results)
+             for k in ("match", "drift", "new", "error")}
+    print("\n" + "  ".join(f"{k}={v}" for k, v in tally.items()))
+    return 1 if bad else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="figcheck")
-    ap.add_argument("program", help="path to a figure program .py")
+    ap.add_argument("program", nargs="*",
+                    help="path to a figure program .py (exactly one, unless "
+                         "--regress/--update, where an empty list means all)")
     ap.add_argument("--width", type=float, default=None,
                     help="override the figure's declared FORMAT width (CSS px)")
     ap.add_argument("--readback-prompt", action="store_true",
                     help="print the cold-reader prompt for the rendered PNG")
     ap.add_argument("--transparent", action="store_true",
                     help="render with no paper/grain; SVG+PNG keep alpha")
+    ap.add_argument("--no-autoplace", action="store_true",
+                    help="skip the label auto-place pass (raw declared offsets)")
     ap.add_argument("--report", action="store_true",
                     help="print a textual scene inventory (label bboxes, "
                          "geometry extents, margins) for layout debugging")
+    ap.add_argument("--zoom", metavar="X0,Y0,X1,Y1[:SCALE]", default=None,
+                    help="write a crop of the rendered PNG as <stem>.zoom.png; "
+                         "coords are MATH coords for a single scene, figure "
+                         "canvas px for a multi-panel figure; :SCALE upsamples "
+                         "the crop (nearest) for inspection")
+    ap.add_argument("--regress", action="store_true",
+                    help="sweep the corpus: re-render every figure and diff "
+                         "against the committed SVG; nonzero on drift/error")
+    ap.add_argument("--update", action="store_true",
+                    help="overwrite the committed SVG+PNG baselines")
+    ap.add_argument("--figures-dir", default="figures",
+                    help="corpus root for --regress/--update (default: figures)")
     args = ap.parse_args(argv)
 
-    report = run(args.program, width_px=args.width, transparent=args.transparent)
+    if args.regress or args.update:
+        return _regress_main(args)
+    if len(args.program) != 1:
+        ap.error("exactly one figure program is required")
+
+    report = run(args.program[0], width_px=args.width, transparent=args.transparent,
+                 place=not args.no_autoplace)
     print(report.summary())
     if args.report:
         from .report import report as layout_report
@@ -38,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.readback_prompt:
         print("\n--- readback prompt ---")
         print(prompt_for(report.png_path))
+    if args.zoom:
+        _zoom_main(report, args.zoom)
     return 0 if report.passed else 1
 
 

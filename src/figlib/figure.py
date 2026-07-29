@@ -4,9 +4,11 @@ A Figure holds Panels (each a Scene with its own math->canvas Transform),
 Connectors between them (squiggle map-arrows, block arrows, =/+ glyphs),
 and a page layer of MathLabels anchored in figure canvas px.
 
-Layout is dumb affine placement — grid slots plus gaps, no constraint
-solver; the mechanical gate catches whatever collides. Every glyph is an
-explicit polyline/polygon in canvas px, so all ink has a bbox we own.
+Layout is dumb affine placement — grid slots plus gaps. Label
+collisions are resolved by the auto-place pass (autoplace.py) where a
+small nudge suffices; whatever it cannot fix, the mechanical gate
+catches. Every glyph is an explicit polyline/polygon in canvas px, so
+all ink has a bbox we own.
 """
 
 from __future__ import annotations

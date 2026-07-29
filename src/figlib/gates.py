@@ -10,9 +10,11 @@ import math
 from dataclasses import dataclass
 from typing import Callable
 
+import numpy as np
+
 from .layout import Transform
 from .render import brace_ink, callout_ink
-from .scene import Brace, Callout, MathLabel, Scene
+from .scene import Brace, Callout, Curve, MathLabel, Point, Scene, Vector
 from .style import Role, Style
 from .typeset import render_math
 
@@ -24,6 +26,7 @@ _DESCENT_FRAC = 0.2
 class Diagnostic:
     kind: str    # 'label-collision' | 'clipped' | 'tiny-label' | 'label-scale'
                  # | 'annotation-load' | 'numerical' | 'faint-ink' | 'hue-collapse'
+                 # | 'label-on-ink' | 'arrow-on-mark'
     detail: str
 
 
@@ -87,11 +90,17 @@ def _canvas_label_box(it: MathLabel, style: Style) -> LabelBox:
     return (it.latex, pt, box)
 
 
-def _label_boxes(scene: Scene, style: Style, t: Transform) -> list[LabelBox]:
+# A resolved box plus the MathLabel that owns it — None when the box is
+# derived geometry (brace labels, callout boxes) that placement cannot move.
+LabelEntry = tuple[LabelBox, MathLabel | None]
+
+
+def _label_entries(scene: Scene, style: Style, t: Transform) -> list[LabelEntry]:
     """Every box the mechanical gate owns: MathLabels (rotation-aware),
     Brace labels, Callout boxes — resolved through the same geometry the
-    render emits."""
-    boxes: list[LabelBox] = []
+    render emits. Each box carries its owning MathLabel when one exists,
+    so the auto-place pass knows what it may move."""
+    entries: list[LabelEntry] = []
     for it in scene.items:
         if isinstance(it, MathLabel):
             pt = style.label_pt(it.size_pt)
@@ -101,14 +110,18 @@ def _label_boxes(scene: Scene, style: Style, t: Transform) -> list[LabelBox]:
             box = _box_at(it.latex, pt, x, y, it.ha, it.va)
             if it.angle_deg:
                 box = _rotate_box(box, x, y, it.angle_deg)
-            boxes.append((it.latex, pt, box))
+            entries.append(((it.latex, pt, box), it))
         elif isinstance(it, Brace) and it.label is not None:
             _, lab = brace_ink(it, t, style)
-            boxes.append(_canvas_label_box(lab, style))
+            entries.append((_canvas_label_box(lab, style), None))
         elif isinstance(it, Callout):
             pt = style.label_pt(it.size_pt)
-            boxes.append((it.latex, pt, callout_ink(it, t, style).box))
-    return boxes
+            entries.append(((it.latex, pt, callout_ink(it, t, style).box), None))
+    return entries
+
+
+def _label_boxes(scene: Scene, style: Style, t: Transform) -> list[LabelBox]:
+    return [box for box, _ in _label_entries(scene, style, t)]
 
 
 def _overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
@@ -214,35 +227,327 @@ def _check_boxes(boxes: list[LabelBox], canvas_w: float, canvas_h: float,
     return diags
 
 
+# --- ink corridors: content strokes as keep-out regions ---------------------
+#
+# A label or halo sitting on content ink is the #1 post-PASS defect: the
+# gate passed, the figure was wrong, and a human looked at pixels to say so.
+# The corridor makes it mechanical — every CONTENT/ACCENT stroke owns a
+# keep-out band of half its stroke width plus a pad, and label boxes must
+# stay out. Scaffolding (CONSTRUCTION/FRAME/MUTED) is exempt: halos may cut
+# scaffolding, never content.
+
+_CORRIDOR_ROLES = frozenset({Role.CONTENT, Role.ACCENT1, Role.ACCENT2})
+_CORRIDOR_PAD = 2.0
+# Sampling cap per curve: at spacing max(radius, 2px) this covers ~4000px of
+# arc; longer curves sample coarser, erring by at most spacing/2.
+_CORRIDOR_MAX_SAMPLES = 2048
+# How far the gate searches for a free single-axis nudge before falling
+# back to the free-region scan (larger than autoplace's budget on purpose:
+# the gate may suggest a move the solver was not allowed to make).
+_CORRIDOR_NUDGE_MAX = 36
+_FREE_SCAN_STEP = 8.0
+
+
+@dataclass(frozen=True)
+class Corridor:
+    samples: np.ndarray            # (M, 2) canvas px, spacing <= radius
+    radius: float                  # stroke_width / 2 + pad
+    what: str
+
+
+def _corridor_samples(cpts: np.ndarray, spacing: float) -> np.ndarray:
+    """Resample a canvas polyline at <= spacing along arc length (adaptive:
+    capped at _CORRIDOR_MAX_SAMPLES for very long curves)."""
+    seg = np.diff(cpts, axis=0)
+    lens = np.hypot(seg[:, 0], seg[:, 1])
+    total = float(lens.sum())
+    if total == 0.0:
+        return cpts[:1]
+    n = int(min(max(total / spacing, 1), _CORRIDOR_MAX_SAMPLES))
+    s = np.concatenate([[0.0], np.cumsum(lens)])
+    u = np.linspace(0.0, total, n + 1)
+    return np.column_stack([np.interp(u, s, cpts[:, 0]),
+                            np.interp(u, s, cpts[:, 1])])
+
+
+def ink_corridors(scene: Scene, style: Style, t: Transform,
+                  offset: tuple[float, float] = (0.0, 0.0)) -> list[Corridor]:
+    """Keep-out corridors for every content-role Curve/Vector, canvas px."""
+    out: list[Corridor] = []
+    for it in scene.items:
+        if isinstance(it, Curve) and it.role in _CORRIDOR_ROLES:
+            cpts = t.to_canvas_arr(np.asarray(it.pts, dtype=float))
+            if it.closed:
+                cpts = np.vstack([cpts, cpts[:1]])
+        elif isinstance(it, Vector) and it.role in _CORRIDOR_ROLES:
+            cpts = np.array([t.to_canvas(it.tail), t.to_canvas(it.tip)])
+        else:
+            continue
+        w = style.ink(it.role).width * it.width_scale
+        r = w / 2.0 + _CORRIDOR_PAD
+        samples = _corridor_samples(cpts, max(r, 2.0))
+        if offset != (0.0, 0.0):
+            samples = samples + np.asarray(offset)
+        out.append(Corridor(samples, r, f"{type(it).__name__} {it.role.name}"))
+    return out
+
+
+def corridor_hit(box: tuple[float, float, float, float],
+                 corridors: list[Corridor]) -> Corridor | None:
+    """The first corridor whose band intersects the box, else None."""
+    for c in corridors:
+        s, r = c.samples, c.radius
+        if np.any((s[:, 0] >= box[0] - r) & (s[:, 0] <= box[2] + r)
+                  & (s[:, 1] >= box[1] - r) & (s[:, 1] <= box[3] + r)):
+            return c
+    return None
+
+
+def _shift(box: tuple[float, float, float, float], dx: float,
+           dy: float) -> tuple[float, float, float, float]:
+    return (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy)
+
+
+def _inflate(box: tuple[float, float, float, float],
+             pad: float) -> tuple[float, float, float, float]:
+    return (box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad)
+
+
+def _corridor_free_nudges(k: int, boxes: list[LabelBox],
+                          corridors: list[Corridor], canvas_w: float,
+                          canvas_h: float, pad: float = 0.0,
+                          max_move: int = _CORRIDOR_NUDGE_MAX) -> list[tuple[float, float]]:
+    """Smallest single-axis moves taking box k (inflated by pad for the
+    corridor test — the halo) clear of every corridor, verified against all
+    other boxes and the canvas. Smallest first, at most two."""
+    box = boxes[k][2]
+    out: list[tuple[float, float]] = []
+    for m in range(1, max_move + 1):
+        for dx, dy in ((float(m), 0.0), (-float(m), 0.0),
+                       (0.0, float(m)), (0.0, -float(m))):
+            cand = _shift(box, dx, dy)
+            if cand[0] < 0 or cand[1] < 0 or cand[2] > canvas_w or cand[3] > canvas_h:
+                continue
+            if corridor_hit(_inflate(cand, pad), corridors) is not None:
+                continue
+            if any(_overlap(cand, boxes[j][2])
+                   for j in range(len(boxes)) if j != k):
+                continue
+            out.append((dx, dy))
+            if len(out) >= 2:
+                return out
+    return out
+
+
+def _nearest_free_center(box: tuple[float, float, float, float],
+                         other_boxes: list[tuple[float, float, float, float]],
+                         corridors: list[Corridor], canvas_w: float,
+                         canvas_h: float) -> tuple[float, float] | None:
+    """Center of the nearest position where the box fits free of every
+    corridor, other box, and the canvas edge — the fallback suggestion
+    when no single-axis nudge frees the label."""
+    w, h = box[2] - box[0], box[3] - box[1]
+    if w > canvas_w or h > canvas_h:
+        return None
+    cx0, cy0 = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    best: tuple[float, float] | None = None
+    best_d = math.inf
+    for cx in np.arange(w / 2, canvas_w - w / 2 + 1e-9, _FREE_SCAN_STEP):
+        for cy in np.arange(h / 2, canvas_h - h / 2 + 1e-9, _FREE_SCAN_STEP):
+            d = math.hypot(cx - cx0, cy - cy0)
+            if d >= best_d:
+                continue
+            cand = (cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+            if corridor_hit(cand, corridors) is not None:
+                continue
+            if any(_overlap(cand, b) for b in other_boxes):
+                continue
+            best, best_d = (float(cx), float(cy)), d
+    return best
+
+
+def _entry_pad(owner: MathLabel | None, style: Style) -> float:
+    """Corridor clearance a label needs beyond its glyph box: the halo cuts
+    ink halo_width past the glyphs, so a haloed box is checked inflated."""
+    return style.halo_width if (owner is not None and owner.halo) else 0.0
+
+
+def _label_ink_checks(entries: list[LabelEntry], corridors: list[Corridor],
+                      style: Style, canvas_w: float, canvas_h: float,
+                      to_math=None) -> list[Diagnostic]:
+    """label-on-ink: a label/halo box intersecting a content-ink corridor.
+    The diagnostic carries the fix — verified free nudges, or the nearest
+    ink-free region center when no single-axis nudge exists."""
+    diags: list[Diagnostic] = []
+    boxes = [box for box, _ in entries]
+    for k, ((latex, _, box), owner) in enumerate(entries):
+        pad = _entry_pad(owner, style)
+        hit = corridor_hit(_inflate(box, pad), corridors)
+        if hit is None:
+            continue
+        halo_note = " (halo cuts it)" if pad else ""
+        nudges = _corridor_free_nudges(k, boxes, corridors, canvas_w,
+                                       canvas_h, pad=pad)
+        if nudges:
+            opts = " or ".join(_fmt_nudge(d) for d in nudges)
+            fix = f" — free: offset_px += {opts}"
+        else:
+            center = _nearest_free_center(_inflate(box, pad),
+                                          [b[2] for i, b in enumerate(boxes) if i != k],
+                                          corridors, canvas_w, canvas_h)
+            if center is None:
+                fix = " — no ink-free region fits this label; trim annotation"
+            elif to_math is not None:
+                mx, my = to_math(center)
+                fix = (f" — no free single-axis nudge; nearest ink-free region "
+                       f"center ({mx:.3g}, {my:.3g}) in math coords")
+            else:
+                fix = (f" — no free single-axis nudge; nearest ink-free region "
+                       f"center ({center[0]:.0f}, {center[1]:.0f}) canvas px")
+        diags.append(Diagnostic(
+            "label-on-ink",
+            f"'{latex}' sits on {hit.what} ink{halo_note}{fix}"))
+    return diags
+
+
+# arrows= fractions scanned for a clear replacement marker position
+_ARROW_SCAN = np.linspace(0.05, 0.95, 19)
+
+
+def _pt_box_gap(p: tuple[float, float],
+                box: tuple[float, float, float, float]) -> float:
+    dx = max(box[0] - p[0], p[0] - box[2], 0.0)
+    dy = max(box[1] - p[1], p[1] - box[3], 0.0)
+    return math.hypot(dx, dy)
+
+
+def _arrow_mark_checks(scene: Scene, style: Style, t: Transform,
+                       label_boxes: list[LabelBox],
+                       offset: tuple[float, float] = (0.0, 0.0)) -> list[Diagnostic]:
+    """arrow-on-mark: a direction marker on CONTENT ink landing on a Point
+    or a label box. The diagnostic names a verified clear arrows= fraction.
+
+    Only content-role curves are checked (the corridor role set): an
+    ANNOTATION axis arrow ends at its label by design — the label names
+    the axis at the tip — and scaffolding markers are not the defect."""
+    from .render import _at_fraction
+
+    ox, oy = offset
+    pts_marks = [((t.to_canvas(p.xy)[0] + ox, t.to_canvas(p.xy)[1] + oy),
+                  style.point_radius * p.radius_scale)
+                 for p in scene.items if isinstance(p, Point)]
+    diags: list[Diagnostic] = []
+    for it in scene.items:
+        if not (isinstance(it, Curve) and it.arrows
+                and it.role in _CORRIDOR_ROLES):
+            continue
+        cpts = t.to_canvas_arr(np.asarray(it.pts, dtype=float))
+        if it.closed:
+            cpts = np.vstack([cpts, cpts[:1]])
+        if offset != (0.0, 0.0):
+            cpts = cpts + np.asarray(offset)
+        head_len = style.arrowhead_len * it.arrow_scale
+
+        def offender(frac: float) -> str | None:
+            tip, _ = _at_fraction(cpts, frac)
+            for (mx, my), pr in pts_marks:
+                if math.hypot(tip[0] - mx, tip[1] - my) < pr + head_len:
+                    return f"Point at canvas ({mx:.0f}, {my:.0f})"
+            for latex, _, box in label_boxes:
+                if _pt_box_gap(tip, box) < head_len:
+                    return f"label '{latex}'"
+            return None
+
+        for frac in it.arrows:
+            mark = offender(frac)
+            if mark is None:
+                continue
+            clear = [u for u in _ARROW_SCAN if offender(float(u)) is None]
+            if clear:
+                best = min(clear, key=lambda u: abs(u - frac))
+                fix = f" — clear: arrows=({best:.2f},)"
+            else:
+                fix = " — no clear fraction on this curve; drop the marker"
+            diags.append(Diagnostic(
+                "arrow-on-mark",
+                f"arrowhead at t={frac:g} on Curve {it.role.name} sits on "
+                f"{mark}{fix}"))
+    return diags
+
+
 def mechanical(scene: Scene, style: Style, width_px: float = 900) -> list[Diagnostic]:
     t = Transform(scene, width_px=width_px)
-    return _check_boxes(_label_boxes(scene, style, t), t.canvas_w, t.canvas_h,
-                        type_scale=style.type_scale)
+    entries = _label_entries(scene, style, t)
+    boxes = [box for box, _ in entries]
+    diags = _check_boxes(boxes, t.canvas_w, t.canvas_h,
+                         type_scale=style.type_scale)
+    corridors = ink_corridors(scene, style, t)
+    diags += _label_ink_checks(entries, corridors, style, t.canvas_w,
+                               t.canvas_h, to_math=t.from_canvas)
+    diags += _arrow_mark_checks(scene, style, t, boxes)
+    return diags
+
+
+def _figure_label_entries(fig: "Figure", style: Style,
+                          width_px: float) -> tuple[list[LabelEntry], float, float]:
+    """Figure-wide entries in page coords: panel labels offset to their
+    slots (owners kept — offset_px is canvas px in both frames), plus
+    tags, connector labels, and page items. Tags and connector labels are
+    derived geometry; page items are movable MathLabels."""
+    from .figure import FRAME_INSET, TAG_PAD, connector_ink, layout_figure
+
+    lay = layout_figure(fig, width_px)
+    entries: list[LabelEntry] = []
+    for panel, slot in zip(fig.panels, lay.slots):
+        for (latex, pt, (x0, y0, x1, y1)), owner in _label_entries(
+                panel.scene, style, slot.transform):
+            entries.append(((latex, pt, (x0 + slot.x, y0 + slot.content_y,
+                                         x1 + slot.x, y1 + slot.content_y)),
+                            owner))
+        if panel.tag:
+            pt = style.label_size_pt
+            entries.append(((panel.tag, pt, _box_at(
+                panel.tag, pt, slot.x + FRAME_INSET + TAG_PAD,
+                slot.y + FRAME_INSET + TAG_PAD, "left", "top")), None))
+    for conn in fig.connectors:
+        entries += [(_canvas_label_box(lab, style), None)
+                    for lab in connector_ink(conn, lay, style).labels]
+    entries += [(_canvas_label_box(lab, style), lab) for lab in fig.page_items]
+    return entries, lay.canvas_w, lay.canvas_h
+
+
+def figure_ink_corridors(fig: "Figure", style: Style,
+                         width_px: float) -> list[Corridor]:
+    """Every panel's content corridors, offset to figure canvas coords."""
+    from .figure import layout_figure
+
+    lay = layout_figure(fig, width_px)
+    out: list[Corridor] = []
+    for panel, slot in zip(fig.panels, lay.slots):
+        out += ink_corridors(panel.scene, style, slot.transform,
+                             offset=(slot.x, slot.content_y))
+    return out
 
 
 def mechanical_figure(fig: "Figure", style: Style, width_px: float = 900) -> list[Diagnostic]:
     """The same label checks run figure-wide: panel labels offset to page
     coords, plus tags, connector labels, and page items — collisions are
-    checked across ALL of them, clipping against the figure canvas."""
-    from .figure import FRAME_INSET, TAG_PAD, connector_ink, layout_figure
+    checked across ALL of them, clipping against the figure canvas. Ink
+    corridors and arrow marks are checked per panel in page coords; the
+    free-region fallback reports canvas px (math coords are panel-local)."""
+    from .figure import layout_figure
 
+    entries, canvas_w, canvas_h = _figure_label_entries(fig, style, width_px)
+    boxes = [box for box, _ in entries]
+    diags = _check_boxes(boxes, canvas_w, canvas_h,
+                         type_scale=style.type_scale)
+    corridors = figure_ink_corridors(fig, style, width_px)
+    diags += _label_ink_checks(entries, corridors, style, canvas_w, canvas_h)
     lay = layout_figure(fig, width_px)
-    boxes: list[LabelBox] = []
     for panel, slot in zip(fig.panels, lay.slots):
-        for latex, pt, (x0, y0, x1, y1) in _label_boxes(panel.scene, style, slot.transform):
-            boxes.append((latex, pt, (x0 + slot.x, y0 + slot.content_y,
-                                      x1 + slot.x, y1 + slot.content_y)))
-        if panel.tag:
-            pt = style.label_size_pt
-            boxes.append((panel.tag, pt, _box_at(
-                panel.tag, pt, slot.x + FRAME_INSET + TAG_PAD,
-                slot.y + FRAME_INSET + TAG_PAD, "left", "top")))
-    for conn in fig.connectors:
-        boxes += [_canvas_label_box(lab, style)
-                  for lab in connector_ink(conn, lay, style).labels]
-    boxes += [_canvas_label_box(lab, style) for lab in fig.page_items]
-    return _check_boxes(boxes, lay.canvas_w, lay.canvas_h,
-                        type_scale=style.type_scale)
+        diags += _arrow_mark_checks(panel.scene, style, slot.transform, boxes,
+                                    offset=(slot.x, slot.content_y))
+    return diags
 
 
 # --- the color gate ---------------------------------------------------------
@@ -278,6 +583,9 @@ _SCAFFOLD_ROLES = frozenset({Role.CONSTRUCTION, Role.FRAME, Role.MUTED})
 ENSEMBLE_MIN = 8
 # Correspondence hues must stay this far apart under protanopia/deuteranopia.
 MIN_CORRESPONDENCE_DELTA_E = 8.0
+# A fill at or above this opacity IS the ground for marks anchored inside
+# it: measuring them against the paper overstates their visibility.
+HIGH_OPACITY_FILL = 0.6
 
 
 def _stroke_color(it, style: Style) -> str | None:
@@ -286,16 +594,24 @@ def _stroke_color(it, style: Style) -> str | None:
     return getattr(it, "color", None) or role_color
 
 
-def color_gate(scene: Scene, style: Style) -> list[Diagnostic]:
+def color_gate(scene: Scene, style: Style, width_px: float = 900,
+               fill_grounds: bool = True) -> list[Diagnostic]:
     """Every mark visible on its ground; correspondence hues separable.
 
     Colours are composited against the paper before measurement — a stroke
     at opacity 0.3 is three times fainter than the hex it declares, and
     measuring the declared value overstates every faint mark in the corpus.
+
+    A Point or MathLabel whose rendered position lies inside a high-opacity
+    FilledCurve is measured against that fill (its actual ground), not the
+    paper — the topmost containing fill wins. fill_grounds=False disables
+    this (the pooled figure gate: panels share math coords, so cross-panel
+    point-in-polygon would lie).
     """
-    from .color import composite, contrast, worst_delta_e
-    from .scene import (Brace, Callout, Curve, FilledCurve, MathLabel, Point,
-                        Vector)
+    from .color import (compliant, composite, contrast, min_compliant_opacity,
+                        worst_delta_e)
+    from .geometry import point_in_poly
+    from .scene import FilledCurve
     from .theme import CORRESPONDENCE, ORDER, SHADE
 
     papers = style.paper_stops() if hasattr(style, "paper_stops") else [style.background]
@@ -330,13 +646,77 @@ def color_gate(scene: Scene, style: Style) -> list[Diagnostic]:
             counts[key] = counts.get(key, 0) + 1
             seen.setdefault(key + (floor,), what)
 
+    def compliant_fix(color: str, paper: str, floor: float, alpha: float) -> str:
+        """'nearest compliant: #xxxxxx (or opacity >= 0.yy)' — the repair,
+        computed so the diagnostic is typed back, not searched for."""
+        alt = compliant(str(color), paper, floor, opacity=alpha)
+        if alt is None:
+            return ""
+        need = min_compliant_opacity(str(color), paper, floor) if alpha < 1.0 else None
+        extra = f" (or opacity >= {need:.2f})" if need is not None else ""
+        return f" — nearest compliant: {alt}{extra}"
+
+    # High-opacity fills are local grounds: a Point/MathLabel rendered
+    # inside one is read against the fill, not the paper.
+    grounds: list[tuple[np.ndarray, tuple, str, float]] = [
+        (np.asarray(it.pts, dtype=float), it.holes,
+         str(it.color or style.ink(it.role).color), it.opacity)
+        for it in scene.items
+        if isinstance(it, FilledCurve) and it.pattern is None
+        and it.opacity >= HIGH_OPACITY_FILL] if fill_grounds else []
+
+    t: Transform | None = None
+
+    def rendered_pos(it) -> tuple[float, float]:
+        """Math coords of the mark as drawn: offset_px applied through the
+        same transform render uses."""
+        nonlocal t
+        if isinstance(it, Point):
+            return it.xy
+        if it.offset_px == (0.0, 0.0):
+            return it.anchor
+        if t is None:
+            t = Transform(scene, width_px=width_px)
+        cx, cy = t.to_canvas(it.anchor)
+        return t.from_canvas((cx + it.offset_px[0], cy + it.offset_px[1]))
+
+    def containing_fill(pos) -> tuple[str, float] | None:
+        """The topmost high-opacity fill containing pos, if any."""
+        hit = None
+        for pts, holes, color, alpha in grounds:
+            if point_in_poly(pos, pts) and not any(
+                    point_in_poly(pos, np.asarray(h)) for h in holes):
+                hit = (color, alpha)
+        return hit
+
     for it in scene.items:
         if isinstance(it, (Curve, Vector, Point, MathLabel, Brace, Callout)):
             c = _stroke_color(it, style)
-            if c:
-                note(c, getattr(it, "opacity", 1.0), it.role, type(it).__name__)
-                if getattr(c, "channel", None) == CORRESPONDENCE:
-                    hues[str(c)] = type(it).__name__
+            if not c:
+                continue
+            if getattr(c, "channel", None) == CORRESPONDENCE:
+                hues[str(c)] = type(it).__name__
+            over = None
+            if grounds and isinstance(it, (Point, MathLabel)):
+                over = containing_fill(rendered_pos(it))
+            if over is not None:
+                # Measured against the actual ground, not the paper.
+                fill_c, fill_a = over
+                floor = floor_for(c, it.role, False)
+                if floor is None:
+                    continue
+                worst, worst_g = min(
+                    (contrast(str(c), composite(fill_c, fill_a, p)),
+                     composite(fill_c, fill_a, p)) for p in papers)
+                if worst < floor:
+                    diags.append(Diagnostic(
+                        "faint-ink",
+                        f"{type(it).__name__} {c} is {worst:.2f}:1 on fill "
+                        f"{fill_c} it sits inside (floor {floor:.1f}:1) — the "
+                        f"mark's ground is the fill, not the paper"
+                        f"{compliant_fix(c, worst_g, floor, 1.0)}"))
+                continue
+            note(c, getattr(it, "opacity", 1.0), it.role, type(it).__name__)
         elif isinstance(it, FilledCurve):
             c = it.color or style.ink(it.role).color
             if c and not it.outline:
@@ -357,7 +737,8 @@ def color_gate(scene: Scene, style: Style) -> list[Diagnostic]:
                 "faint-ink",
                 f"{what} {color}{alpha_note}{bundle} is {worst:.2f}:1 on paper "
                 f"{worst_paper} (floor {floor:.1f}:1) — darken the ink or "
-                f"lighten the paper, never leave the mark invisible"))
+                f"lighten the paper, never leave the mark invisible"
+                f"{compliant_fix(color, worst_paper, floor, alpha)}"))
 
     # Correspondence is all-pairs here: any two curves in a plane figure can
     # end up adjacent, unlike segments in a stack.
@@ -384,10 +765,13 @@ def color_gate(scene: Scene, style: Style) -> list[Diagnostic]:
 
 def color_gate_figure(fig: "Figure", style: Style) -> list[Diagnostic]:
     """The same checks across every panel of a multi-panel figure — hues are
-    pooled, since correspondence is exactly what has to hold ACROSS panels."""
+    pooled, since correspondence is exactly what has to hold ACROSS panels.
+    Fill-as-ground is skipped here: panels share math coordinates, so a
+    pooled point-in-polygon test would read one panel's marks against
+    another panel's fills."""
     from .scene import Scene
     pooled = Scene(items=[it for panel in fig.panels for it in panel.scene.items])
-    return color_gate(pooled, style)
+    return color_gate(pooled, style, fill_grounds=False)
 
 
 def numerical(assert_fn: Callable[[], None]) -> list[Diagnostic]:

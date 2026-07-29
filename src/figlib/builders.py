@@ -193,6 +193,65 @@ def marching_squares(Z: np.ndarray, xs: np.ndarray, ys: np.ndarray,
 
 
 # ---------------------------------------------------------------------------
+# level selection
+
+
+def _sample_field(scalar: ScalarField, xlim: tuple[float, float],
+                  ylim: tuple[float, float], n: int, mask) -> np.ndarray:
+    """Z on an n x n grid, NaN where masked (mask: bool array or callable
+    (X, Y) -> bool, True = excluded) — the shared sampling convention."""
+    xs = np.linspace(xlim[0], xlim[1], n)
+    ys = np.linspace(ylim[0], ylim[1], n)
+    X, Y = np.meshgrid(xs, ys)
+    excluded = None
+    if callable(mask):
+        excluded = np.asarray(mask(X, Y), dtype=bool)
+    elif mask is not None:
+        excluded = np.asarray(mask, dtype=bool)
+    if excluded is None:
+        with np.errstate(all="ignore"):
+            return np.asarray(scalar(X, Y), dtype=float)
+    Z = np.full(X.shape, np.nan)
+    keep = ~excluded
+    with np.errstate(all="ignore"):
+        Z[keep] = scalar(X[keep], Y[keep])
+    return Z
+
+
+def auto_levels(scalar: ScalarField, xlim: tuple[float, float],
+                ylim: tuple[float, float], *, target_lines: int = 13,
+                n: int = 256, mask=None, exclude: Sequence[float] = (),
+                pct: tuple[float, float] = (2, 98)) -> list[float]:
+    """Contour levels a human would have picked: robust range, round spacing.
+
+    The field is sampled on an n x n grid (mask excludes cells, same
+    convention as stream_function_lines), the range taken at the pct
+    percentiles (singular spikes must not stretch the ladder), spacing
+    chosen from the 1/2/5 decade ladder nearest span/target_lines, and
+    levels snapped to integer multiples of the spacing. Levels within
+    spacing*1e-6 of an `exclude` value are dropped (e.g. the Psi = 0
+    separatrix drawn separately as the actor).
+    """
+    vals = _sample_field(scalar, xlim, ylim, n, mask)
+    vals = vals[np.isfinite(vals)]
+    if vals.size == 0:
+        return []
+    lo, hi = np.percentile(vals, pct)
+    span = float(hi - lo)
+    if span <= 0.0 or target_lines < 1:
+        return []
+    raw = span / target_lines
+    decade = 10.0 ** np.floor(np.log10(raw))
+    ladder = np.array([1.0, 2.0, 5.0, 10.0]) * decade
+    spacing = float(ladder[np.argmin(np.abs(np.log(ladder / raw)))])
+    k0 = int(np.ceil(lo / spacing - 1e-9))
+    k1 = int(np.floor(hi / spacing + 1e-9))
+    tol = spacing * 1e-6
+    return [k * spacing for k in range(k0, k1 + 1)
+            if not any(abs(k * spacing - e) <= tol for e in exclude)]
+
+
+# ---------------------------------------------------------------------------
 # stream-function level lines
 
 
@@ -216,6 +275,8 @@ def _orient_with_flow(pts: np.ndarray, psi: ScalarField, h: float) -> np.ndarray
 def stream_function_lines(psi: ScalarField, xlim: tuple[float, float],
                           ylim: tuple[float, float], levels: Sequence[float],
                           n: int = 400, mask=None, arrows: tuple[float, ...] = (0.5,),
+                          min_arc_frac: float = 0.03,
+                          min_marker_arc: float | None = None,
                           **curve_kw) -> list[Curve]:
     """Level sets of a stream function Psi as flow-oriented Curves.
 
@@ -226,24 +287,27 @@ def stream_function_lines(psi: ScalarField, xlim: tuple[float, float],
     polyline is oriented so v = (dPsi/dy, -dPsi/dx) points along
     increasing parameter — markers (hollow by default) point WITH the
     flow.
+
+    Two culls, both in math units because the builder never sees a style:
+
+    - polylines shorter than min_arc_frac of the domain diagonal are
+      dropped (grid-corner stubs: marching-squares slivers that read as
+      dirt, not flow);
+    - direction markers are suppressed on polylines shorter than
+      min_marker_arc (default 5% of the diagonal — roughly 5x a default
+      arrowhead's math-space extent at column format; the honest style-
+      space rule would need the arrowhead length, which is only known at
+      emission).
     """
     curve_kw.setdefault("role", Role.CONTENT)
     curve_kw.setdefault("arrow_style", "hollow")
     xs = np.linspace(xlim[0], xlim[1], n)
     ys = np.linspace(ylim[0], ylim[1], n)
-    X, Y = np.meshgrid(xs, ys)
-    excluded = None
-    if callable(mask):
-        excluded = np.asarray(mask(X, Y), dtype=bool)
-    elif mask is not None:
-        excluded = np.asarray(mask, dtype=bool)
-    if excluded is None:
-        Z = np.asarray(psi(X, Y), dtype=float)
-    else:
-        Z = np.full(X.shape, np.nan)
-        keep = ~excluded
-        Z[keep] = psi(X[keep], Y[keep])
+    Z = _sample_field(psi, xlim, ylim, n, mask)
     h = min(xs[1] - xs[0], ys[1] - ys[0])
+    diag = float(np.hypot(xlim[1] - xlim[0], ylim[1] - ylim[0]))
+    if min_marker_arc is None:
+        min_marker_arc = 0.05 * diag
 
     out: list[Curve] = []
     for level in levels:
@@ -252,8 +316,13 @@ def stream_function_lines(psi: ScalarField, xlim: tuple[float, float],
             pts = line[:-1] if closed else line
             if len(pts) < 2:
                 continue
+            seg = np.diff(np.vstack([pts, pts[:1]]) if closed else pts, axis=0)
+            arc = float(np.hypot(seg[:, 0], seg[:, 1]).sum())
+            if arc < min_arc_frac * diag:
+                continue
             out.append(Curve(_orient_with_flow(pts, psi, h), closed=closed,
-                             arrows=arrows, **curve_kw))
+                             arrows=arrows if arc >= min_marker_arc else (),
+                             **curve_kw))
     return out
 
 
@@ -371,6 +440,61 @@ def stagnation_points(field: PlaneField, xlim: tuple[float, float],
     return [(float(r[0]), float(r[1])) for r in kept]
 
 
+def assert_tangents_align(curves, field: PlaneField, tol_deg: float = 1.0,
+                          exclude_near: Sequence[tuple[float, float]] = (),
+                          exclude_radius: float = 0.3) -> None:
+    """The drawn streamlines really follow the field — for assertions().
+
+    Signed check: wide-stencil chord tangents (pts[i+w] - pts[i-w], w a
+    fraction of the polyline, so marching-squares jaggies average out)
+    versus the field direction at pts[i]; the angle must stay within
+    tol_deg, direction included — a level line oriented AGAINST its flow
+    fails at ~180 deg, which the unsigned check would miss. Samples within
+    exclude_radius of any exclude_near point are skipped (stagnation
+    points and singularities turn the field direction faster than any
+    chord can follow). Raises AssertionError naming the worst offender.
+    """
+    from .geometry import cross2d
+
+    excl = np.asarray(exclude_near, dtype=float).reshape(-1, 2)
+    worst = 0.0
+    worst_at: tuple[int, float, float] | None = None
+    for ci, c in enumerate(curves):
+        pts = np.asarray(c.pts if isinstance(c, Curve) else c, dtype=float)
+        m = len(pts)
+        w = max(2, m // 16)
+        if m < 2 * w + 1:
+            continue
+        idx = np.arange(w, m - w, max(1, (m - 2 * w) // 16))
+        chords = pts[idx + w] - pts[idx - w]
+        at = pts[idx]
+        if len(excl):
+            d = np.linalg.norm(at[:, None, :] - excl[None, :, :], axis=2)
+            keep = d.min(axis=1) > exclude_radius
+            chords, at = chords[keep], at[keep]
+        if not len(at):
+            continue
+        with np.errstate(all="ignore"):
+            v = np.asarray(field(at), dtype=float)
+        ok = (np.isfinite(v).all(axis=1) & np.isfinite(chords).all(axis=1)
+              & (np.hypot(v[:, 0], v[:, 1]) > 0)
+              & (np.hypot(chords[:, 0], chords[:, 1]) > 0))
+        chords, at, v = chords[ok], at[ok], v[ok]
+        if not len(at):
+            continue
+        ang = np.degrees(np.arctan2(cross2d(chords, v),
+                                    (chords * v).sum(axis=1)))
+        k = int(np.argmax(np.abs(ang)))
+        if abs(float(ang[k])) > worst:
+            worst = abs(float(ang[k]))
+            worst_at = (ci, float(at[k, 0]), float(at[k, 1]))
+    if worst > tol_deg:
+        ci, x, y = worst_at
+        raise AssertionError(
+            f"tangent deviates {worst:.2f} deg from the field (tol "
+            f"{tol_deg:g}) on curve {ci} near ({x:.3g}, {y:.3g})")
+
+
 # ---------------------------------------------------------------------------
 # ramp_segments
 
@@ -413,3 +537,55 @@ def ramp_segments(pts: np.ndarray, n: int = 24, *,
                          color=color(t_mid) if color is not None else None,
                          cap="butt"))
     return out
+
+
+# ---------------------------------------------------------------------------
+# domain_color
+
+
+def domain_color(f: ComplexMap, xlim: tuple[float, float],
+                 ylim: tuple[float, float], n: int, theme,
+                 *, opacity: float = 1.0, interp: bool = True) -> "RasterField":
+    """f on a complex grid -> a RasterField colored by `theme.phase`.
+
+    A domain-coloring portrait: the plane is the domain, and every pixel
+    wears the value f(z) there. It exists because the graph of a complex
+    function lives in four real dimensions, so the usual moves — plot the
+    curve, plot the surface — have nowhere to go. Coloring the domain trades
+    the third and fourth dimensions for a color channel and gets the whole
+    function on one page.
+
+    What the reader can then read OFF the picture, without any annotation:
+
+    - **zeros and poles, and their orders** — the hue wheel winds once per
+      order, positively around a zero and negatively around a pole, so the
+      order is a count of how many times the color cycles on a small loop;
+    - **which is which** — the lightness trend in `theme.phase` sends zeros
+      dark and poles light, so the two kinds of singularity do not have to
+      be told apart by tracing a winding direction;
+    - **level sets of the modulus** — the sawtooth in log2|f| draws
+      |f| = 2^k as contours, for free, and their crowding is |f|'s
+      steepness;
+    - **conformality** — the hue and modulus contours cross at right angles
+      wherever f is analytic and f' does not vanish.
+
+    A pure producer: no roles, no annotation, no opinion about the frame.
+    `interp` defaults True here (unlike the scalar RasterField) because a
+    phase portrait is a continuous field sampled finely, not a lattice of
+    cells the reader is meant to count.
+    """
+    import numpy as np
+
+    from .scene import RasterField
+
+    if n < 2:
+        raise ValueError(f"domain_color needs n >= 2, got {n}")
+    xs = np.linspace(xlim[0], xlim[1], n)
+    ys = np.linspace(ylim[1], ylim[0], n)      # descending: row 0 is the top
+    z = xs[None, :] + 1j * ys[:, None]
+    with np.errstate(all="ignore"):
+        w = np.asarray(f(z), dtype=complex)
+    rgb = theme.phase(np.angle(w), np.abs(w))
+    return RasterField(rgb, extent=(float(xlim[0]), float(xlim[1]),
+                                    float(ylim[0]), float(ylim[1])),
+                       opacity=opacity, interp=interp)

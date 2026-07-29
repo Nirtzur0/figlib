@@ -44,6 +44,21 @@ State, in order:
   - Lightness = ordered quantity (radius, level k).
   - An accent = the distinguished object (the lemniscate, the separatrix).
   - Never decoration.
+- **A mark the reader cannot see is not a mark.** Content ink clears 3:1
+  against the paper it lands on, measured after compositing its opacity —
+  the color gate checks this, so it is not a matter of taste. Scaffolding
+  (construction, frame, muted) is deliberately quieter and only has to stay
+  perceptible; an ensemble drawn to show a distribution is judged as the
+  bundle it is, not per path. The failures: viridis' light end at 1.6:1 on
+  white left the last rays of the z^n fan drawn but unreadable, and the riso
+  ramp's mustard sat at 1.3:1 on cream — effectively unprinted.
+- **Correspondence hues must survive color-blindness.** Same hue = same
+  object only holds if a reader can separate the hues; the gate checks all
+  pairs (not just neighbors — any two curves in a plane can end up side by
+  side) under protanopia and deuteranopia. This caps how many hues a palette
+  can carry: four for RISO, three for CLEAN. Past the cap, identity rides
+  dash or facets — never a generated hue, which is indistinguishable from
+  one already in use.
 - **Show distributional claims, don't assert them.** A claim about an
   ensemble (marginals match, endpoints cluster) needs the ensemble on
   the figure (endpoint strips, dense mesh), not a silhouette plus trust.
@@ -90,13 +105,19 @@ State, in order:
    verified against a finer integration, distributional claims checked
    on a large ensemble even when only a few paths are drawn.
 2. **Mechanical:** no label collisions/clipping (exact bboxes).
-3. **Readback:** a context-free model sees only the PNG and reports in
+3. **Color:** every mark visible on its paper (contrast measured after
+   compositing opacity, floors following the ink hierarchy), and every
+   correspondence hue pairwise separable under protanopia/deuteranopia.
+   Palette-level properties — slot separation, ramp monotonicity — are
+   asserted per theme in `tests/test_color_gate.py`, so a palette edit
+   cannot silently regress the corpus.
+4. **Readback:** a context-free model sees only the PNG and reports in
    two passes — a *glance read* (first impression: does the macro
    structure alone carry the claim?) and a *studied read* (the claim,
    confusion bullets, and which steps were verifiable by inspection
    vs. taken on trust). A missed glance read is a macro-structure
    failure even if the studied read recovers. Confusion bullets are
    design review — each one is either fixed or explicitly accepted.
-4. **Comparative (when a reference exists):** a judge sees the original
+5. **Comparative (when a reference exists):** a judge sees the original
    and the recreation and rules BOOK BETTER / COMPARABLE / RECREATION
    BETTER with named defects. Iterate until at least COMPARABLE.

@@ -3,10 +3,10 @@ labels, pattern fills, evenodd holes, scene clipping, RasterField."""
 
 import base64
 import io
-import xml.etree.ElementTree as ET
 
 import numpy as np
 import pytest
+from svgkit import svg_root, tag
 
 from figlib.figure import Figure, Panel
 from figlib.gates import _label_boxes, mechanical
@@ -24,15 +24,6 @@ def box_scene(*extra, **scene_kw) -> Scene:
     kw = {"xlim": (0, 10), "ylim": (0, 10)}
     kw.update(scene_kw)
     return Scene(items=[Curve(pts, closed=True), *extra], **kw)
-
-
-def svg_root(svg: str) -> ET.Element:
-    return ET.fromstring(svg)
-
-
-def tag(e: ET.Element) -> str:
-    """Local tag name — ET.fromstring namespaces tags ({svg}path)."""
-    return e.tag.rsplit("}", 1)[-1]
 
 
 class TestBrace:

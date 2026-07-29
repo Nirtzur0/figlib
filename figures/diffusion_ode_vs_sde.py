@@ -94,7 +94,9 @@ def build(g):
     # SDE paths: jittery, thin, semi-transparent — a few suffice; more is fog
     for row in g["sde"][:4]:
         pts = np.column_stack([_u(g["ts_sde"], T), row])
-        s.add(Curve(pts, role=Role.ACCENT2, width_scale=0.5, opacity=0.55))
+        # 0.75, not 0.55: with only four paths drawn each one is an
+        # individually-read object, and 0.55 put them at 2.19:1 on white.
+        s.add(Curve(pts, role=Role.ACCENT2, width_scale=0.5, opacity=0.75))
     # ODE paths: smooth, on top
     for row in g["ode"]:
         pts = np.column_stack([_u(g["ts_ode"], T), row])

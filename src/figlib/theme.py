@@ -42,16 +42,40 @@ class Hue(str):
 CORRESPONDENCE = "correspondence"   # hue = identity: same hue, same object
 ORDER = "order"                     # lightness = an ordered quantity
 SHADE = "shade"                     # 3D facet lighting
+WASH = "wash"                       # large-area region fill, paper-blended
 
 
 def _lerp_hex(stops: list[str], t: float) -> str:
+    """Walk a stop list in OKLab, not in hex channels.
+
+    A ramp's semantic contract is ORDER, and the coordinate carrying order is
+    OKLab L — so that is the space the interpolation has to happen in.
+    Interpolating '#rrggbb' channels handed the middle of every ramp to the
+    sRGB transfer curve: the RISO level-curve ramp's sampled lightness
+    wandered 0.010 off the straight perceptual path between its stops and
+    reversed by ~0.001 inside the mustard->brick leg. Mixing in OKLab makes
+    L(t) exactly piecewise linear, so equal steps in t are equal steps in
+    perceived lightness. Endpoints and stop colors are unchanged — the
+    palettes still look like themselves, only the middles are smoother.
+    """
+    from .color import mix_oklab
+
     t = min(max(t, 0.0), 1.0)
     x = t * (len(stops) - 1)
     j = min(int(x), len(stops) - 2)
-    f = x - j
-    a = [int(stops[j][k:k + 2], 16) for k in (1, 3, 5)]
-    b = [int(stops[j + 1][k:k + 2], 16) for k in (1, 3, 5)]
-    return "#" + "".join(f"{round(u + f * (v - u)):02x}" for u, v in zip(a, b))
+    return mix_oklab(stops[j], stops[j + 1], x - j)
+
+
+# The cyclic phase channel maps modulus onto lightness through a sawtooth in
+# log2|f|, so one period is one OCTAVE — a doubling of the modulus. A decade
+# was the alternative; octaves win because the interesting structure near a
+# zero or a pole is a *ratio* structure and doublings put roughly three times
+# as many contours in the same dynamic range, which is what makes the rings
+# around z = 1 legible rather than a single wash.
+PHASE_PERIOD_OCTAVES = 1.0
+# |f| outside 2^±40 is a zero or a pole as far as any raster is concerned;
+# clamping there keeps log2 finite so those pixels get a color, not a hole.
+_PHASE_LOG_CLAMP = 40.0
 
 
 @dataclass(frozen=True)
@@ -85,6 +109,35 @@ class Theme(Style):
     # no paper rect, no grain; SVG/PNG keep alpha for embedding in documents
     transparent: bool = False
 
+    # --- cyclic phase channel (domain coloring) ---------------------------
+    # A *periodic* quantity cannot ride the ordered ramp: arg = -pi and
+    # arg = +pi are the same direction and must get the same color, which no
+    # monotone scale can do. So phase gets its own channel — the OKLCh hue
+    # circle at constant L and C, which is the one hue path that is
+    # perceptually even all the way round (HSV's is not: its yellow is far
+    # lighter than its blue, so an HSV phase portrait fakes structure at
+    # arg ~ pi/2 that the function does not have).
+    # C is held constant around the circle rather than pushed to each hue's
+    # maximum, because a chroma that varies with phase is a second signal in
+    # a channel meant to carry none. sRGB is the binding constraint: at
+    # constant L the largest chroma available at EVERY hue is only ~0.106 at
+    # L = 0.60, rising to ~0.130 at L = 0.74 — so each theme's C is set just
+    # under the floor of its own sawtooth band and the two themes cannot
+    # differ much here. They differ in hue origin, base lightness and band
+    # depth instead.
+    phase_lightness: float = 0.70     # L at the middle of the sawtooth band
+    phase_chroma: float = 0.095       # C held around the whole circle
+    phase_hue_deg: float = 250.0      # hue at arg = 0 — the theme's signature
+    phase_band: float = 0.085         # peak-to-peak L of the per-octave sawtooth
+    phase_trend: float = 0.16         # L amplitude of the zero-dark/pole-light trend
+    # tanh scale of that trend, in octaves. Three, not the ten a "cover the
+    # dynamic range" instinct suggests: the trend has to have visibly picked
+    # a side by the time the eye is a fifth of the frame from a singularity,
+    # and |f| has already moved 3-4 octaves by then. Set wide, the polarity
+    # only resolves in the last few pixels, where the sawtooth is aliasing
+    # anyway, and zeros and poles read alike.
+    phase_trend_octaves: float = 3.0
+
     def ramp(self, t: float) -> Hue:
         return Hue(_lerp_hex(self.ramp_stops, t), ORDER)
 
@@ -113,6 +166,93 @@ class Theme(Style):
 
     def surface_shade(self, t: float) -> Hue:
         return Hue(_lerp_hex(self.surface_stops, t), SHADE)
+
+    def wash(self, i: int | None = None, strength: float = 0.38) -> Hue:
+        """Large-area region fill: a hue pre-blended toward the paper,
+        returned OPAQUE — basin shading, region identity, ground washes.
+
+        This exists because the alternative — role ink under a 0.18 alpha
+        tint — goes muddy on textured paper, so figures avoid regions
+        entirely and the area channel sits unused. Blending in the theme
+        (against the light paper stop) keeps the result printable and lets
+        the contrast gate measure it directly: a vanished wash still fails
+        the perceptible floor.
+
+        i indexes the same fixed slots as categorical(), so a wash can
+        carry correspondence with a stroke hue (basin i matches sink i);
+        None gives a neutral content-ink wash. strength is the ink
+        fraction of the blend; the default is the smallest value at which
+        EVERY slot clears the 1.3:1 perceptible floor on the worst paper
+        stop of both house themes (light slots like RISO's sage bind at
+        0.38; darker slots clear from ~0.2). Weaker washes are legal but
+        slot-dependent — the color gate is the arbiter, not the eye.
+        """
+        if i is None:
+            base = self.ink(Role.CONTENT).color
+        else:
+            if not 0 <= i < len(self.categorical_stops):
+                raise IndexError(
+                    f"wash slot {i} outside the {len(self.categorical_stops)} "
+                    f"fixed slots — washes carry correspondence, same rules "
+                    f"as categorical()")
+            base = self.categorical_stops[i]
+        paper = self.paper[0] if self.paper else self.background
+        if not paper.startswith("#"):
+            paper = "#ffffff"
+        return Hue(_lerp_hex([paper, base], strength), WASH)
+
+    def phase(self, arg, mag):
+        """(arg, mag) -> sRGB in [0, 1], shape (..., 3). Vectorized.
+
+        The cyclic counterpart of `ramp`. `arg` is a phase in [-pi, pi] and
+        `mag` a modulus > 0; together they are one complex number per pixel,
+        so this runs per-pixel and returns an RGB array rather than a `Hue`.
+
+        Mechanism, in three terms:
+
+        - **hue = arg**, rigidly. `h = phase_hue_deg + arg` on the OKLCh
+          circle at fixed L and C, so equal phase differences are equal
+          perceived hue differences and the wrap at ±pi is seamless by
+          construction. Which hue sits at arg = 0 is the theme's choice, and
+          is what makes a CLEAN portrait and a RISO portrait recognizably
+          the same figure in two houses.
+        - **lightness = a sawtooth in log2|f|**, one period per octave
+          (`PHASE_PERIOD_OCTAVES`). L rises across each doubling and steps
+          back at |f| = 2^k, so the level sets |f| = 2^k draw themselves as
+          sharp contours. Modulus information for free: no extra ink, no
+          second pass, and the contours crowd exactly where |f| moves fast.
+        - **lightness += a saturating trend in log2|f|**, `tanh(u / K)`.
+          The sawtooth alone is periodic, so a zero and a pole look
+          identical up close — both are a pile of converging rings. The
+          trend breaks that symmetry: zeros go dark, poles go light, and the
+          two are told apart at a glance. tanh rather than a linear term so
+          the range stays bounded no matter how wild |f| gets.
+
+        Chroma carries nothing, which is why gamut handling reduces C
+        (hue and L held exactly) rather than clipping channels. Near a zero
+        or a pole the trend pushes L past what sRGB can hold at full chroma,
+        so those cores desaturate toward black and white — which is the
+        classic domain-coloring look and is here a consequence, not a rule.
+        """
+        import numpy as np
+
+        from .color import oklch_to_rgb
+
+        arg = np.nan_to_num(np.asarray(arg, dtype=float), nan=0.0)
+        mag = np.asarray(mag, dtype=float)
+        finite = np.isfinite(mag)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            u = np.log2(np.where(finite & (mag > 0.0), mag, 1.0))
+        u = np.where(finite, u, _PHASE_LOG_CLAMP)          # poles
+        u = np.where(finite & (mag <= 0.0), -_PHASE_LOG_CLAMP, u)   # zeros
+        u = np.clip(u, -_PHASE_LOG_CLAMP, _PHASE_LOG_CLAMP)
+
+        saw = np.mod(u / PHASE_PERIOD_OCTAVES, 1.0)
+        L = (self.phase_lightness
+             + self.phase_band * (saw - 0.5)
+             + self.phase_trend * np.tanh(u / self.phase_trend_octaves))
+        h = np.radians(self.phase_hue_deg) + arg
+        return oklch_to_rgb(L, self.phase_chroma, h)
 
     def paper_stops(self) -> list[str]:
         """Every ground a mark could land on — the contrast gate takes the
@@ -173,6 +313,17 @@ RISO = Theme(
     surface_stops=["#3d3a5c", "#9d4260", "#e76f51", "#e9c46a", "#f4ead0"],
     surface_edge="#7a6f63",
     grain=0.5,
+    # Phase circle, riso identity: mustard at arg = 0 (the house ochre sits
+    # at OKLCh hue ~80 deg), a lower base lightness and a heavier sawtooth
+    # than CLEAN — a riso print's whole look is banding, so the modulus
+    # contours are wanted loud here and quiet there. The deeper band reaches
+    # L = 0.60, where sRGB caps every-hue chroma at 0.106, which is what sets
+    # C = 0.104 (still above CLEAN's 0.095: the portrait reads as ink).
+    phase_lightness=0.66,
+    phase_chroma=0.104,
+    phase_hue_deg=80.0,
+    phase_band=0.115,
+    phase_trend=0.17,
 )
 
 

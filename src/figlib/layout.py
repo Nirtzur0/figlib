@@ -79,6 +79,11 @@ class Transform:
             (self._y1 - xy[1]) * self.scale_y,
         )
 
+    def from_canvas(self, xy: tuple[float, float]) -> tuple[float, float]:
+        """Inverse of to_canvas — for diagnostics that must speak math coords."""
+        return (xy[0] / self.scale_x + self._x0,
+                self._y1 - xy[1] / self.scale_y)
+
     def to_canvas_arr(self, pts: np.ndarray) -> np.ndarray:
         out = np.empty_like(pts, dtype=float)
         out[:, 0] = (pts[:, 0] - self._x0) * self.scale_x
