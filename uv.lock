@@ -153,6 +153,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cairosvg" },
     { name = "numpy" },
+    { name = "pillow" },
     { name = "pytest" },
     { name = "scipy" },
     { name = "ziamath" },
@@ -162,6 +163,7 @@ dependencies = [
 requires-dist = [
     { name = "cairosvg", specifier = ">=2.9.0" },
     { name = "numpy", specifier = ">=2.2.6" },
+    { name = "pillow", specifier = ">=12.3.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "ziamath", specifier = ">=0.13" },

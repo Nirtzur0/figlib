@@ -64,8 +64,18 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
             "viewBox": f"0 0 {_fmt(t.canvas_w)} {_fmt(t.canvas_h)}",
         },
     )
+    defs = ET.SubElement(root, "defs")
+    paper = getattr(style, "paper", None)
+    if paper and paper[0] != paper[1]:
+        grad = ET.SubElement(defs, "linearGradient",
+                             {"id": "paper", "x1": "0", "y1": "0", "x2": "0", "y2": "1"})
+        ET.SubElement(grad, "stop", {"offset": "0", "stop-color": paper[0]})
+        ET.SubElement(grad, "stop", {"offset": "1", "stop-color": paper[1]})
+        bg_fill = "url(#paper)"
+    else:
+        bg_fill = paper[0] if paper else style.background
     ET.SubElement(root, "rect", {"x": "0", "y": "0", "width": _fmt(t.canvas_w),
-                                 "height": _fmt(t.canvas_h), "fill": style.background})
+                                 "height": _fmt(t.canvas_h), "fill": bg_fill})
 
     for it in scene.items:
         if isinstance(it, Curve):
@@ -150,6 +160,17 @@ def to_svg_tree(scene: Scene, style: Style = DEFAULT_STYLE, width_px: float = 90
                       color=it.color or style.ink(it.role).color,
                       halign=it.ha, valign=it.va)
 
+    grain = getattr(style, "grain", 0.0)
+    if grain > 0:
+        from .theme import grain_tile_datauri
+        pat = ET.SubElement(defs, "pattern", {
+            "id": "grain", "patternUnits": "userSpaceOnUse",
+            "width": "140", "height": "140"})
+        ET.SubElement(pat, "image", {
+            "href": grain_tile_datauri(), "width": "140", "height": "140"})
+        ET.SubElement(root, "rect", {
+            "x": "0", "y": "0", "width": _fmt(t.canvas_w), "height": _fmt(t.canvas_h),
+            "fill": "url(#grain)", "opacity": _fmt(grain)})
     return root, t
 
 

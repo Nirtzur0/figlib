@@ -12,6 +12,9 @@ import numpy as np
 from figlib.scene import MathLabel, Scene, Vector
 from figlib.style import Role
 from figlib.surface3d import Camera, compose, polyline_items, project, surface_items
+from figlib.theme import RISO
+
+THEME = RISO
 
 CLAIM = (
     "The graph of 1/(1+x^2) is the tranquil real-axis slice of the modular "
@@ -67,12 +70,13 @@ def build(g):
                        [h + m, h + m, 0], [-h - m, h + m, 0]], dtype=float)
     plane_items = surface_items(
         plane3[:, 0].reshape(2, 2), plane3[:, 1].reshape(2, 2),
-        np.zeros((2, 2)), cam, dark="#dfe3ea", lite="#eef1f5",
-        edge="#b5bac4", edge_width=0.6)
+        np.zeros((2, 2)), cam, dark="#e2d8c2", lite="#ece3d0",
+        edge="#c6bba6", edge_width=0.6)
     # force the plane behind everything
     plane_items = [(-1e9, it) for _, it in plane_items]
 
-    surf = surface_items(g["X"], g["Y"], g["F"], cam)
+    surf = surface_items(g["X"], g["Y"], g["F"], cam,
+                         shade=THEME.surface_shade, edge=THEME.surface_edge)
     trace = polyline_items(g["trace"], cam, depth_bias=0.05,
                            role=Role.ACCENT2, width_scale=1.5)
     circle = polyline_items(g["circle"], cam, depth_bias=0.06,
@@ -115,7 +119,7 @@ def build(g):
     # the convergence circle, labeled where it crosses the front
     (cl2,), _ = project(np.array([[0.72, -0.72, 0.75]]), cam)
     s.add(MathLabel(r"|z| = 1", tuple(cl2), ha="left", va="top", offset_px=(16, 20),
-                    color="#3d6fb4"))
+                    role=Role.ACCENT1))
     # name the surface and admit the truncation
     (sl2,), _ = project(np.array([[-2.0, 0.9, 0.55]]), cam)
     s.add(MathLabel(r"\left|\tfrac{1}{1+z^2}\right|", tuple(sl2), ha="right",

@@ -64,6 +64,7 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
         default_out = Path(mod.__file__ or ".").parent / "out"
     out = Path(out_dir) if out_dir else default_out
 
+    style = getattr(mod, "THEME", None) or style
     geom = mod.compute(mod.PARAMS)
     scene = mod.build(geom)
     diags = numerical(lambda: mod.assertions(geom))

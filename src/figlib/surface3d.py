@@ -49,7 +49,8 @@ LIGHT_DIR = LIGHT / np.linalg.norm(LIGHT)
 def surface_items(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, cam: Camera,
                   dark: str = "#5f6f8f", lite: str = "#f4f6fa",
                   edge: str = "#6a6f7a", edge_width: float = 0.35,
-                  mask: np.ndarray | None = None) -> list[tuple[float, FilledCurve]]:
+                  mask: np.ndarray | None = None,
+                  shade=None) -> list[tuple[float, FilledCurve]]:
     """Shaded quads of the graph surface, each tagged with its depth.
 
     mask (same shape as Z, boolean): quads with any masked corner are
@@ -72,11 +73,12 @@ def surface_items(X: np.ndarray, Y: np.ndarray, Z: np.ndarray, cam: Camera,
             if nn == 0:
                 continue
             normal = normal / nn if normal[2] >= 0 else -normal / nn
-            shade = 0.25 + 0.75 * max(0.0, float(normal @ LIGHT_DIR))
+            t = 0.25 + 0.75 * max(0.0, float(normal @ LIGHT_DIR))
+            fill = shade(t) if shade is not None else _mix(dark, lite, t)
             pts2, depth = project(quad3, cam)
             items.append((float(depth.mean()), FilledCurve(
                 pts2, role=Role.CONTENT, opacity=1.0, outline=False,
-                color=_mix(dark, lite, shade), edge_color=edge,
+                color=fill, edge_color=edge,
                 edge_width=edge_width)))
     return items
 
