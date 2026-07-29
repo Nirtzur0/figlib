@@ -9,7 +9,7 @@ accented and its image is the circle through the origin.
 import numpy as np
 
 from figlib.geometry import cassinian_curves
-from figlib.scene import Curve, MathLabel, Point, Scene, Vector
+from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
 
 CLAIM = (
@@ -83,6 +83,16 @@ def build(g):
                     size_pt=10, role=Role.ANNOTATION))
     s.add(MathLabel(r"r_1 r_2 = k^2", (-1.55, 1.15), ha="left", va="center",
                     role=Role.ANNOTATION))
+    d1 = (z0.real + 1, z0.imag)
+    d2 = (z0.real - 1, z0.imag)
+    s.add(AngleMark((-1.0, 0.0), (1.0, 0.0), d1, radius=0.24))
+    a1 = np.arctan2(d1[1], d1[0])
+    s.add(MathLabel(r"\theta_1", (-1.0 + 0.38 * np.cos(a1 / 2), 0.38 * np.sin(a1 / 2)),
+                    ha="left", va="center", size_pt=9, role=Role.ANNOTATION))
+    s.add(AngleMark((1.0, 0.0), (1.0, 0.0), d2, radius=0.18))
+    a2 = np.arctan2(d2[1], d2[0])
+    s.add(MathLabel(r"\theta_2", (1.0 + 0.30 * np.cos(a2 / 2), 0.30 * np.sin(a2 / 2)),
+                    ha="left", va="center", size_pt=9, role=Role.ANNOTATION))
 
     # --- mapping arrow ---
     s.add(Vector((2.25, 1.35), (3.0, 1.35), role=Role.ANNOTATION))
@@ -99,12 +109,25 @@ def build(g):
                         color=LEVEL_COLORS[k]))
     s.add(Point((W + 1.0, 0.0), role=Role.CONTENT))
     s.add(MathLabel(r"1", (W + 1.0, 0.0), ha="center", va="top", offset_px=(0, 9)))
-    s.add(Point((W, 0.0), role=Role.CONTENT, filled=False, radius_scale=0.8))
+    s.add(Point((W, 0.0), role=Role.CONTENT, radius_scale=0.7))
     s.add(MathLabel(r"0", (W, 0.0), ha="right", va="top", offset_px=(-5, 9)))
+    s.add(MathLabel(r"\pm 1 \mapsto 1", (W + 1.0, 0.0), ha="center", va="top",
+                    offset_px=(0, 26), size_pt=9, role=Role.ANNOTATION))
     w0 = z0 * z0
     s.add(Point((W + w0.real, w0.imag), role=Role.CONTENT, radius_scale=0.8))
     s.add(MathLabel(r"w = z^2", (W + w0.real, w0.imag), ha="left", va="bottom",
                     offset_px=(6, -5)))
+    # w - 1 = (z-1)(z+1): length r1 r2 = k^2, angle theta1 + theta2
+    s.add(Curve(np.array([[W + 1.0, 0.0], [W + w0.real, w0.imag]]),
+                role=Role.CONSTRUCTION, width_scale=0.9))
+    mw = ((1.0 + w0.real) / 2, w0.imag / 2)
+    s.add(MathLabel(r"r_1 r_2 = k^2", (W + mw[0], mw[1]), ha="center", va="bottom",
+                    offset_px=(14, -6), size_pt=10, role=Role.ANNOTATION))
+    dw = (w0.real - 1.0, w0.imag)
+    s.add(AngleMark((W + 1.0, 0.0), (1.0, 0.0), dw, radius=0.30))
+    aw = np.arctan2(dw[1], dw[0])
+    s.add(MathLabel(r"\theta_1 + \theta_2", (W + 1.0 + 0.52 * np.cos(aw / 2), 0.52 * np.sin(aw / 2)),
+                    ha="left", va="center", size_pt=9, role=Role.ANNOTATION))
 
     return s
 
