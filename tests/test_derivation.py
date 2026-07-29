@@ -117,13 +117,16 @@ class TestGlosses:
             assert g.role is Role.ANNOTATION
             assert g.anchor[1] < anchors[i][1]
 
-    def test_gloss_drop_is_1p8_term_heights(self):
+    def test_default_gloss_drop_is_3_term_heights(self):
+        # Clearance needs > 2.5 term heights or the tick runs through the
+        # term's own glyphs (verified on the qk figure); 3.0 is the default.
         items, anchors = row(y=0.0)
         glosses = sorted(gloss_labels(items), key=lambda g: g.anchor[0])
+        assert glosses, "no glosses produced"
         for g, (i, t) in zip(glosses,
                              [(i, t) for i, t in enumerate(TERMS) if t.gloss]):
             h = term_height_units(t.latex)
-            assert g.anchor[1] == pytest.approx(-1.8 * h)
+            assert g.anchor[1] == pytest.approx(-3.0 * h)
 
     def test_gloss_tick_curves(self):
         items, anchors = row()
@@ -141,7 +144,7 @@ class TestGlosses:
             span = float(tk.pts[:, 1].max() - tk.pts[:, 1].min())
             i = next(i for i, t in enumerate(TERMS)
                      if t.gloss and math.isclose(anchors[i][0], x, abs_tol=1e-9))
-            drop = 1.8 * term_height_units(TERMS[i].latex)
+            drop = 3.0 * term_height_units(TERMS[i].latex)
             assert span == pytest.approx(0.6 * drop, rel=1e-6)
 
 
@@ -159,3 +162,23 @@ class TestDiscipline:
         items, _ = row(terms)
         a = next(it for it in labels_of(items) if it.latex == "a")
         assert a.role is Role.ACCENT1 and a.key == "k1"
+
+
+class TestReadingPxPerUnit:
+    def test_reading_px_per_unit_divides_out_ink_scale(self):
+        # px_per_unit here is READING px per math unit. At WIDE the render
+        # multiplies every px quantity by ink_scale = 1.45, so the canvas
+        # scale (schematic.px_per_unit) is 1.45x too tight for typeset
+        # metrics measured at reading size.
+        from figlib.derivation import reading_px_per_unit
+        from figlib.format import WIDE, COLUMN
+
+        xlim = (0.0, 500.0)
+        pad = 0.08
+        got = reading_px_per_unit(WIDE, xlim)
+        want = WIDE.display_width_px / (WIDE.ink_scale * 500.0 * (1 + 2 * pad))
+        assert got == pytest.approx(want)
+        # at ink_scale 1 it coincides with the canvas-px bridge
+        from figlib.schematic import px_per_unit
+        assert reading_px_per_unit(COLUMN, xlim) == pytest.approx(
+            px_per_unit(xlim, COLUMN.display_width_px))

@@ -9,12 +9,18 @@ whitespace between its neighbors with `gap_pt` of clearance on both sides,
 and hangs sans-register glosses beneath the glossed terms.
 
 Layout happens in math units but is metric in px: the caller states
-`px_per_unit`, canvas px per math unit — compute it from the figure's
-FORMAT width and xlim via `schematic.px_per_unit`. (`plots.px_units`
-serves the same bridge but returns the RECIPROCAL, math units per px;
-invert it before passing it here.) Point sizes convert through `typeset.PX_PER_PT`
-— `size_pt` is authored reading-size pt, the convention every MathLabel
-already uses.
+`px_per_unit`, READING px per math unit — reading px, not canvas px,
+because every width here comes from `typeset.render_math` at reading-size
+pt and the render then rescales all px quantities by the format's
+`ink_scale`. At COLUMN (`ink_scale` 1) the two coincide and
+`schematic.px_per_unit` is the right bridge; at WIDE (`ink_scale` 1.45)
+the canvas value would lay the row out 1.45x too tight — use
+`reading_px_per_unit(FORMAT, xlim)` below. (`plots.px_units` serves the
+same bridge but returns the RECIPROCAL, math units per CANVAS px.)
+`figures/qk_score_derivation.py` is the worked example: it picks xlim so
+one math unit IS one reading px and passes `px_per_unit=1.0`. Point sizes
+convert through `typeset.PX_PER_PT` — `size_pt` is authored reading-size
+pt, the convention every MathLabel already uses.
 
 Every produced label is `pin=True`: position IS meaning here, and the
 auto-place pass must not touch it. Colliding glosses are NOT solved
@@ -38,6 +44,18 @@ _GLOSS_SCALE = 0.8          # secondary voice: smaller than the mathematics
 _TICK_FRAC = 0.6            # tick spans the middle 0.6 of the drop
 
 
+def reading_px_per_unit(fmt, xlim: tuple[float, float],
+                        pad_frac: float = 0.08) -> float:
+    """READING px per math unit for a scene at format `fmt` — the value
+    `derivation_row` wants. Divides the canvas-px bridge
+    (`schematic.px_per_unit`) by `fmt.ink_scale`, since the render blows
+    every px quantity up by that factor after layout. At `ink_scale` 1 the
+    two are equal. See `figures/qk_score_derivation.py` for the frame this
+    exists to keep honest."""
+    dx = max(float(xlim[1]) - float(xlim[0]), 1e-12) * (1.0 + 2.0 * pad_frac)
+    return float(fmt.display_width_px) / (float(fmt.ink_scale) * dx)
+
+
 @dataclass(frozen=True)
 class Term:
     """One term of the expansion, with its optional prose gloss."""
@@ -58,7 +76,7 @@ def derivation_row(
     gloss_size_pt: float | None = None,
     px_per_unit: float,
     gap_pt: float = 14.0,
-    drop_factor: float = 1.8,
+    drop_factor: float = 3.0,
 ) -> tuple[list[Item], list[XY]]:
     """Lay out `lhs = term op term op ...` with glosses hung beneath.
 
@@ -72,7 +90,10 @@ def derivation_row(
     boxes in a row. `gap_pt` is the clearance floor on EACH side of an
     operator; the operator sits midway in that whitespace. Glossed terms
     get a `Role.ANNOTATION`, `register="sans"` gloss centered `drop_factor
-    x` the term's height below `y`, joined by a short vertical tick.
+    x` the term's height below `y`, joined by a short vertical tick — the
+    tick spans the middle `_TICK_FRAC` of the drop, so a `drop_factor`
+    below ~2.5 runs it through the term's own glyphs; the default stays
+    clear of them.
     """
     size = size_pt if size_pt is not None else _DEFAULT_SIZE_PT
     gsize = gloss_size_pt if gloss_size_pt is not None else _GLOSS_SCALE * size

@@ -228,7 +228,7 @@ def brace_ink(it: Brace, t: Transform, style: Style) -> tuple[np.ndarray, MathLa
         ax, ay = cpts[BRACE_CUSP] + BRACE_LABEL_GAP * out
         ha, va = _outward_alignment(out)
         label = MathLabel(it.label, (float(ax), float(ay)), role=it.role,
-                          ha=ha, va=va)
+                          ha=ha, va=va, register=it.label_register)
     return cpts, label
 
 

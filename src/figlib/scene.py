@@ -203,6 +203,10 @@ class Brace:
     side: float = 1.0
     depth: float | None = None     # math units; None -> 6% of the span
     label: str | None = None
+    # "mono" | "sans" (typeset.apply_register): a derivation brace speaks
+    # sans. Rides the resolved MathLabel, so render ink and gate metrics
+    # stay identical — brace_ink is the single resolver for both.
+    label_register: str | None = None
     role: Role = Role.ANNOTATION
     # correspondence name: the marks that ARE the same object across the
     # parts of a composite figure share a key. Renders nothing; it is what
