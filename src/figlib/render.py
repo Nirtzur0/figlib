@@ -172,11 +172,13 @@ def _ensure_grain_pattern(defs: ET.Element) -> str:
 
 
 def _emit_grain(root: ET.Element, defs: ET.Element, style: Style, w: float, h: float) -> None:
-    # The PAGE-WIDE overlay is the paper's texture, so it goes with the paper:
-    # over no ground it composites as a full-bleed speckle field, which reads
-    # as exactly the background the transparent render exists to remove.
-    # Grain INSIDE a fill is a different thing — that is ink, and it stays.
-    grain = 0.0 if getattr(style, "transparent", False) else getattr(style, "grain", 0.0)
+    # Grain is INK, not paper: it is the riso PRINT texture, so it rides every
+    # render whose theme asks for it — groundless included. The cost is that
+    # the overlay is canvas-sized, so a transparent figure's bounding rect is
+    # faintly visible against a host background. That is bounded and small
+    # (tile alpha caps at 25/255, RISO grain is 0.5, so ~5% at peak) and it is
+    # the accepted trade. Suppressing it here was the bug.
+    grain = getattr(style, "grain", 0.0)
     if grain > 0:
         ET.SubElement(root, "rect", {
             "x": "0", "y": "0", "width": _fmt(w), "height": _fmt(h),

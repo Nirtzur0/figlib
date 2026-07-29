@@ -148,11 +148,11 @@ def compare_figure(program_path: str | Path, out_dir: str | Path,
 
 
 def variants(program_path: Path, out_dir: Path) -> list[bool]:
-    """Which renders the corpus commits for this program: always the plain
-    (groundless) one, plus the papered one iff a `_paper` baseline exists."""
-    if (out_dir / f"{program_path.stem}_paper.svg").exists():
-        return [False, True]
-    return [False]
+    """Both grounds, always: the groundless render for embedding in a document,
+    and the theme's own cream paper for standing alone. Sniffing for an
+    existing `_paper` baseline (the old rule) meant a figure that had never
+    been papered could never start being papered."""
+    return [False, True]
 
 
 def sweep(figures_dir: str | Path, out_dir: str | Path | None = None,

@@ -10,6 +10,7 @@ import numpy as np
 from figlib.format import WIDE
 from figlib.scene import AngleMark, Curve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
+from figlib.theme import RISO
 
 CLAIM = (
     "The mapping z -> z^3 sends each ray at angle theta to the ray at angle "
@@ -17,6 +18,8 @@ CLAIM = (
     "polar-grid sector opens out into a fan three times as wide while every "
     "grid intersection stays a right angle."
 )
+
+THEME = RISO
 
 FORMAT = WIDE
 
@@ -29,30 +32,26 @@ PARAMS = {
     "w_origin": 3.9,   # where the image panel sits
 }
 
-# Viridis, 10 stops — hue encodes theta. The upper four stops are darkened
-# into the visible band (hue held, lightness and chroma moved): stock viridis
-# runs to #dbc932, which is 1.69:1 on white, so the last rays of the fan were
-# drawn but not readable. Viridis's *hue* sequence is what carries theta here;
-# its lightness ramp is incidental, so compressing it costs nothing.
-RAY_COLORS = ["#440154", "#482878", "#3e4989", "#31688e", "#26828e",
-              "#1f9e89", "#30a76f", "#41a82a", "#7e9f0e", "#a59402"]
+# theta is BOUNDED and monotone here (0 -> theta_max), so it is an ORDERED
+# quantity and rides the theme's own ramp. A hand-rolled viridis table used to
+# live here, with its top four stops darkened by hand because stock viridis
+# runs to #dbc932 (1.69:1 on white). That table was a worse reimplementation
+# of theme.ramp: it silently stopped retheming, and the moment the figure got
+# a cream paper variant the contrast gate caught two of its stops below the
+# 3:1 floor. The theme owns ink-vs-paper contrast; a figure must not.
+RAMP_LO = 0.06
 
 
-def ray_color(i: int, n: int) -> str:
-    """Interpolate the viridis stops for arbitrary ray counts."""
-    x = i / (n - 1) * (len(RAY_COLORS) - 1)
-    j = min(int(x), len(RAY_COLORS) - 2)
-    f = x - j
-    a = [int(RAY_COLORS[j][k:k+2], 16) for k in (1, 3, 5)]
-    b = [int(RAY_COLORS[j+1][k:k+2], 16) for k in (1, 3, 5)]
-    return "#" + "".join(f"{round(u + f*(v-u)):02x}" for u, v in zip(a, b))
+def ray_color(i: int, n: int):
+    """Hue encodes theta, through the theme's ordered ramp."""
+    t = i / max(n - 1, 1)
+    return THEME.ramp(RAMP_LO + (1.0 - RAMP_LO) * t)
 
 
-def arc_gray(r: float, R: float) -> str:
-    """Lightness encodes radius, dark = large r — the r -> r^n bunching
-    must be readable, so the arcs cannot be uniform faint ink."""
-    v = int(190 - 120 * (r / R))
-    return f"#{v:02x}{v:02x}{v:02x}"
+def arc_gray(r: float, R: float):
+    """Lightness encodes radius, dark = large r — the r -> r^n bunching must
+    be readable, so the arcs cannot be uniform faint ink."""
+    return THEME.surface_shade(1.0 - 0.75 * (r / R))
 
 
 def compute(p):

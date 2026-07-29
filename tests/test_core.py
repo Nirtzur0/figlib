@@ -87,10 +87,12 @@ class TestRender:
         papered = to_svg(make_scene(), RISO_PAPER, width_px=900)
         clear = to_svg(make_scene(), RISO, width_px=900)
         assert "url(#paper)" in papered and "url(#grain)" in papered
-        # groundless is the default: no paper rect, and no page-wide grain
-        # overlay either -- that overlay IS the paper's texture.
+        # Groundless drops the PAPER but keeps the grain: grain is the riso
+        # PRINT texture, a property of the ink, not of the sheet. A figure run
+        # through a riso press is grainy whether or not you can see the paper
+        # behind it.
         assert "url(#paper)" not in clear and RISO.background not in clear
-        assert "url(#grain)" not in clear
+        assert "url(#grain)" in clear
 
 
 class TestCurveMarkers:

@@ -13,6 +13,7 @@ from figlib.geometry import (Mixture1D, mixture_pdf, mixture_score, ou_marginal,
                              pf_ode_paths, reverse_sde_paths, sample_mixture)
 from figlib.scene import Curve, FilledCurve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
+from figlib.theme import RISO
 
 CLAIM = (
     "Starting from the same draws of pure noise, the jittery reverse-time SDE "
@@ -21,6 +22,8 @@ CLAIM = (
     "two-mode data distribution, because both integrate the same score field "
     "and share the same marginals at every intermediate time."
 )
+
+THEME = RISO
 
 FORMAT = WIDE
 
@@ -96,7 +99,7 @@ def build(g):
         pts = np.column_stack([_u(g["ts_sde"], T), row])
         # 0.75, not 0.55: with only four paths drawn each one is an
         # individually-read object, and 0.55 put them at 2.19:1 on white.
-        s.add(Curve(pts, role=Role.ACCENT2, width_scale=0.5, opacity=0.75))
+        s.add(Curve(pts, role=Role.ACCENT2, width_scale=0.5, opacity=0.82))
     # ODE paths: smooth, on top
     for row in g["ode"]:
         pts = np.column_stack([_u(g["ts_ode"], T), row])

@@ -117,8 +117,28 @@ def main(argv: list[str] | None = None) -> int:
     if len(args.program) != 1:
         ap.error("exactly one figure program is required")
 
-    report = run(args.program[0], width_px=args.width, paper=args.paper,
-                 place=not args.no_autoplace)
+    # Artifacts land in the mirrored out/ tree, exactly where --regress looks
+    # for them. Without this, `program.run` falls back to <program>/../out, so
+    # a subject-binned figure would write figures/complex/out/ and the sweep
+    # would never see it -- a single render silently disagreeing with the
+    # corpus about where its own baseline lives.
+    from pathlib import Path
+
+    from .regress import artifact_dir
+
+    # Only when the program really lives under --figures-dir; a program given
+    # by absolute path from somewhere else keeps program.run's own default
+    # (<program>/../out), which is what host projects outside this repo rely on.
+    program = Path(args.program[0])
+    figures_dir = Path(args.figures_dir)
+    out_dir = None
+    try:
+        program.resolve().relative_to(figures_dir.resolve())
+        out_dir = artifact_dir(program, figures_dir)
+    except ValueError:
+        pass
+    report = run(program, out_dir=out_dir, width_px=args.width,
+                 paper=args.paper, place=not args.no_autoplace)
     print(report.summary())
     if args.report:
         from .report import report as layout_report

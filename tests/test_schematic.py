@@ -395,7 +395,7 @@ class TestTransformerBlockBenchmark:
 
         from figlib.program import load_program
         root = Path(__file__).resolve().parents[1]
-        return load_program(root / "figures" / "schematic_transformer_block.py")
+        return load_program(root / "figures" / "circuits" / "schematic_transformer_block.py")
 
     def test_build_passes_the_mechanical_gate_with_zero_diagnostics(self):
         from figlib.gates import mechanical
@@ -774,7 +774,7 @@ class TestInductionHeadBenchmark:
 
         from figlib.program import load_program
         root = Path(__file__).resolve().parents[1]
-        return load_program(root / "figures" / "induction_head_circuit.py")
+        return load_program(root / "figures" / "circuits" / "induction_head_circuit.py")
 
     def test_numerical_assertions_hold(self):
         mod = self._load()

@@ -12,7 +12,7 @@ from figlib.format import WIDE
 from figlib.geometry import cassinian_curves
 from figlib.scene import AngleMark, Callout, Curve, MathLabel, Point, Scene, Vector
 from figlib.style import Role
-from figlib.theme import CLEAN
+from figlib.theme import RISO
 
 CLAIM = (
     "The Cassinian curves |z-1||z+1| = k^2 with foci +-1 are exactly the "
@@ -20,7 +20,7 @@ CLAIM = (
     "k=1 lemniscate mapping to the circle through the origin."
 )
 
-THEME = CLEAN
+THEME = RISO
 FORMAT = WIDE
 
 PARAMS = {

@@ -10,6 +10,7 @@ from figlib.geometry import exp_partial_sums
 from figlib.scene import (AngleMark, Curve, MathLabel, Point,
                           RightAngleMark, Scene, Vector)
 from figlib.style import Role
+from figlib.theme import RISO
 
 CLAIM = (
     "The partial sums of the power series for e^z, evaluated at z = iθ, "
@@ -17,6 +18,8 @@ CLAIM = (
     "the unit circle, while the same series at real z = θ moves straight "
     "along the real axis toward e^θ."
 )
+
+THEME = RISO
 
 PARAMS = {
     "theta": 2.0,

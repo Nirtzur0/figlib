@@ -424,6 +424,6 @@ class TestEndToEnd:
         from figlib.program import run
 
         prog = (Path(__file__).resolve().parents[1] / "figures"
-                / "strogatz_saddle_node.py")
+                / "dynamics" / "strogatz_saddle_node.py")
         report = run(prog, out_dir=tmp_path)
         assert report.passed, report.summary()

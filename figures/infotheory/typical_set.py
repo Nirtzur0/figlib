@@ -197,7 +197,7 @@ def build(g):
     s.add(FilledCurve(
         np.array([[g["r_lo"], u_lo], [g["r_hi"], u_lo],
                   [g["r_hi"], u_hi], [g["r_lo"], u_hi]]),
-        role=Role.MUTED, opacity=0.23, outline=False))
+        role=Role.MUTED, opacity=0.27, outline=False))
 
     # axes: r along the bottom (a frame axis, not tied to a data value),
     # value on the left, explicitly log10 -- the tick labels say 10^k and
