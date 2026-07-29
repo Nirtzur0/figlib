@@ -229,7 +229,7 @@ def compute(p):
     top = nodes["out"].port("top")
     edges.append(sch.edge(top, (top[0], top[1] + u(p["trunc_len_px"])),
                           truncated=True, trunc_half=u(p["trunc_half_px"]),
-                          key="depth", **spine_kw))
+                          key="spine-continue", **spine_kw))
     # d_model on the first segment, in the empty gutter opposite branch 1
     e = edges[0]
     e.label, e.label_role = dm, Role.ANNOTATION
@@ -357,15 +357,14 @@ def assertions(g):
         c.check(np.allclose(e.pts[:, 0], x_spine, atol=1e-12),
                 f"{e.key} is not vertical at x = {x_spine}")
         c.check(np.all(np.diff(e.pts[:, 1]) > 0), f"{e.key} does not run upward")
-    branch = [e for e in edges
-              if not e.key.startswith("spine") and e.key != "depth"]
+    branch = [e for e in edges if not e.key.startswith("spine")]
     c.check(min(e.width_scale for e in spine) > max(e.width_scale for e in branch),
             "the residual stream is not the heaviest ink in the figure")
     # the truncation stub is spine ink continuing the same line: it must
     # leave x_{l+1}'s top edge, stay on the lane, run upward, and its
     # ellipsis must land inside the declared limits (rank layout, not the
     # stub, decides where out's top is — so this CAN drift)
-    depth = by_key["depth"]
+    depth = by_key["spine-continue"]
     c.check(np.allclose(depth.pts[:, 0], x_spine, atol=1e-12),
             f"the depth stub is not on the spine lane at x = {x_spine}")
     c.check(abs(depth.anchors[0][1] - nodes["out"].rect[3]) < 1e-9,
@@ -405,7 +404,7 @@ def assertions(g):
 
     # --- schematic checks ---------------------------------------------------
     ported = [e for e in edges
-              if not e.key.startswith("read->") and e.key != "depth"]
+              if not e.key.startswith("read->") and e.key != "spine-continue"]
     off = sch.max_port_offset(ported, node_list)
     c.check(off < 1e-9, f"port attachment off the box boundary by {off:.3g}")
     for e in edges:
