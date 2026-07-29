@@ -4,6 +4,10 @@ Extracted from Needham (*Visual Complex Analysis*, Figs 4–14) and hardened
 by adversarial judging of our recreations against the originals. Each rule
 earned its place by a concrete failure.
 
+Upstream of these rendering rules sits exposition.md — whether the
+figure deserves to exist, which representation to choose, and how a
+reader's attention traverses it. That layer decides; this one renders.
+
 ## The design step (before any code)
 
 State, in order:
@@ -86,9 +90,13 @@ State, in order:
    verified against a finer integration, distributional claims checked
    on a large ensemble even when only a few paths are drawn.
 2. **Mechanical:** no label collisions/clipping (exact bboxes).
-3. **Readback:** a context-free model sees only the PNG and must state
-   the claim. Its *confusion bullets* are design review — each one is
-   either fixed or explicitly accepted.
+3. **Readback:** a context-free model sees only the PNG and reports in
+   two passes — a *glance read* (first impression: does the macro
+   structure alone carry the claim?) and a *studied read* (the claim,
+   confusion bullets, and which steps were verifiable by inspection
+   vs. taken on trust). A missed glance read is a macro-structure
+   failure even if the studied read recovers. Confusion bullets are
+   design review — each one is either fixed or explicitly accepted.
 4. **Comparative (when a reference exists):** a judge sees the original
    and the recreation and rules BOOK BETTER / COMPARABLE / RECREATION
    BETTER with named defects. Iterate until at least COMPARABLE.

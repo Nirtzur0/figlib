@@ -99,32 +99,59 @@ pattern.
 ## The thinking layer (what actually decides quality)
 
 Everything above is plumbing. Quality is decided before code, by the
-design step — the prompts that will form the skill's core. In order:
+design step — the prompts that will form the skill's core. The theory
+behind each step lives in exposition.md; the steps, in order:
 
+0. **Earn the figure.** Write the one-sentence prose version that would
+   make the drawing unnecessary. If it succeeds, no figure (prose is
+   preferred — the reader runs their own imagery). If it fails, name
+   the specific inference the reader must make and check the figure
+   will make it *perceptual* — premises co-located, conclusion readable
+   as a visual feature. A figure that redraws the prose fails here.
 1. **CLAIM.** One sentence, the claim the figure argues. If you cannot
-   write it, there is no figure yet.
-2. **Encoding choice, at a size.** Which geometry makes the claim
-   *visible*, and in which page slot (Format)? The annotation load and
-   the slot are chosen together — a MARGIN figure carries one label, a
-   WIDE comparison carries the theorem.
-   (Trajectories? level sets? a mesh deforming? a surface? an endpoint
-   ensemble?) Ask: what would Needham draw; what does the claim's HARD
-   half need (grammar.md).
-3. **Mechanism annotation.** Which quantities must a cold reader be able
-   to read OFF the figure to reconstruct the argument? Draw them; a
-   caption stating what the drawing could show is a defect.
-4. **Channel assignment.** Map the claim's structure onto the theme's
+   write it, there is no figure yet. The claim may be delivered as a
+   provocation (an unexplained phenomenon, a drawn counterexample) —
+   but it exists.
+2. **Representation.** Which primitive makes the claim's hypothesis
+   checkable by eye (triangles, not rectangles)? What is the expert's
+   *private* picture of this, the one that never gets published — draw
+   that. Fix the abstraction rung (instance / trajectory / family /
+   behavior map), one rung per figure, anchored by a bound concrete
+   case. For a ∀-claim, a diverse population treated uniformly; for a
+   limit or deformation, the one frame where the conclusion becomes
+   obvious. If the picture saturates mid-argument, change
+   representation rather than decorate.
+3. **Size and slot.** Which page slot (Format)? Annotation load and
+   slot are chosen together — a MARGIN figure carries one label, a
+   WIDE comparison carries the theorem. Ink budget goes to the claim's
+   HARD half (grammar.md).
+4. **Traversal.** Script the read: where does attention enter (the
+   claim), what path does adjacency force, what does a 3-second glance
+   yield vs. a 30-second study? Everything used in one inference sits
+   at one location. Delete off-message content first, then signal the
+   skeleton.
+5. **Mechanism annotation.** Which quantities must a cold reader be able
+   to read OFF the figure to reconstruct the argument? Draw them, on
+   the elements they describe; a caption stating what the drawing could
+   show is a defect.
+6. **Reader effort.** Which verification is delegated to the reader
+   (its answer already on the figure), and which step is kept? Spend
+   nothing on decoding, deliberately on the punchline inference.
+7. **Channel assignment.** Map the claim's structure onto the theme's
    channels: what is correspondence (hue), what is order (ramp), what is
-   THE object (accent), what is scaffolding (construction ink).
-5. **Honesty pass.** What does the depiction lie about (truncated
+   THE object (accent), what is scaffolding (construction ink). The
+   quantity carrying the claim gets the top of the perceptual hierarchy
+   (position > length > slope > area > shading).
+8. **Honesty pass.** What does the depiction lie about (truncated
    infinities, selected seeds, unequal panel scales)? Admit each on the
-   figure or fix it.
-6. **Gate plan.** Which numerical assertions certify the geometry, and
-   what should the cold reader say?
+   figure or fix it. Then audit the *accidental* assertions: what do
+   layout coincidences, unencoded positions, and axis ranges claim?
+9. **Gate plan.** Which numerical assertions certify the geometry, and
+   what should the cold reader's glance read and studied read each say?
 
-Steps 1–3 are figure design; 4 is theming; 5–6 are verification. The
-skill = these prompts + grammar.md + the figure-program template + the
-gate harness. Model-facing wording lives with the skill when distilled
+Steps 0–6 are figure design; 7 is theming; 8–9 are verification. The
+skill = these prompts + exposition.md + grammar.md + the figure-program
+template + the gate harness. Model-facing wording lives with the skill when distilled
 (M5); this file is the architectural home.
 
 ## Judged results so far (why we believe the pipeline)

@@ -17,15 +17,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 READBACK_PROMPT = """\
-Read the image file {png_path} and look at it carefully.
+Read the image file {png_path}.
 
 You are a cold reader: you have no other context about this figure.
-Answer based ONLY on what the image shows:
+Answer based ONLY on what the image shows, in two passes:
 
-1. In one sentence: what mathematical claim does this figure make?
+GLANCE (before studying anything): from your first overall impression
+only — the largest shapes, the most prominent marks —
+1. In one phrase: what is this figure about, and what does it seem to
+   be asserting?
+
+STUDY (now look carefully):
+2. In one sentence: what mathematical claim does this figure make?
    (Not a description of what's drawn — the claim the drawing is arguing for.)
-2. In 2-3 bullets: anything that confused you, seemed ambiguous, or that
+3. In 2-3 bullets: anything that confused you, seemed ambiguous, or that
    you had to guess at.
+4. Which parts of the argument could you verify by inspection of the
+   figure itself, and which did you have to take on trust?
+
+The GLANCE answer is graded separately: a figure whose glance read
+misses the claim has a macro-structure failure even if the studied
+read recovers it.
 """
 
 
