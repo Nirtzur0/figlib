@@ -43,7 +43,7 @@ from typing import Iterable, Sequence
 from .figure import Figure, layout_figure
 from .gates import Diagnostic
 from .scene import Scene
-from .style import Style
+from .style import Role, Style
 
 # Page scales this far apart are the same scale (rounding in slot widths).
 SCALE_TOL = 0.005
@@ -204,6 +204,142 @@ def _frame_diagnostics(corr: Correspondence, scales: Sequence[tuple[float, float
                 f"scales, or mark the rescale ON the page (a shared-size "
                 f"reference or a stated magnification) so the size change "
                 f"reads as the frame's, not the object's.")))
+    return diags
+
+
+# --- hue as a referential noun ----------------------------------------------
+#
+# corpus-study.md §6: a hue is a NOUN. It names one object, is declared once,
+# and means that object everywhere it appears — which is what lets a reader
+# cross a panel boundary without re-reading the legend. Two ways to break it,
+# both mechanical:
+#
+#   hue-split      one key, two inks — the object appears twice as two objects
+#   hue-collision  two keys, one correspondence hue — one noun, two referents
+#
+# Split is checked within each panel AND across panel pairs. It runs with no
+# declaration, like every other gate — an undeclared composite is exactly the
+# case where the reader has no legend to fall back on. The one thing it steps
+# around is a panel pair a declared `Correspondence` already covers: there the
+# residual above reports the same drift (`_facet` puts color in the identity
+# fingerprint) with the fix the author actually needs — repaint, or add the key
+# to `changes=`. Reporting it twice would make that fix ambiguous. A key
+# declared in `changes=` is covered for the same reason: the correspondence has
+# taken responsibility for it.
+#
+# Collision is pooled across the whole figure, because correspondence is
+# exactly the thing that has to survive the panel boundary.
+#
+# Participation is by CLAIM, not by type. An item participates if it carries an
+# explicit `.color` — which is a deliberate hue choice wherever it appears,
+# including on a label, and a colored label is precisely where hue-as-noun gets
+# read — or if it wears one of the object-bearing roles below. Scaffolding ink
+# (CONSTRUCTION / ANNOTATION / FRAME) is not a hue claim: it is the ink that
+# recedes, shared by everything wearing the role, and a keyed group routinely
+# spans an object plus its annotation (demo_panels_zsquared keys a Curve, an
+# AngleMark and an ANNOTATION label together).
+_HUE_ROLES = frozenset({Role.CONTENT, Role.ACCENT1, Role.ACCENT2, Role.MUTED})
+
+
+def _hue_marks(scene: Scene, style: Style):
+    """(key, resolved color) for each keyed hue claim, render's precedence."""
+    for item in scene.items:
+        key = getattr(item, "key", None)
+        if not key:
+            continue
+        color = getattr(item, "color", None)
+        if color is None:
+            role = getattr(item, "role", None)
+            if role not in _HUE_ROLES:
+                continue
+            color = style.ink(role).color
+        if isinstance(color, str) and color:
+            yield key, color
+
+
+def _panel_inks(scene: Scene, style: Style) -> dict[str, set[str]]:
+    inks: dict[str, set[str]] = {}
+    for key, color in _hue_marks(scene, style):
+        inks.setdefault(key, set()).add(str(color).lower())
+    return inks
+
+
+def _covered_pairs(corrs: Iterable[Correspondence]) -> set[tuple[int, int]]:
+    """Panel pairs the residual already walks, for every key they share."""
+    pairs: set[tuple[int, int]] = set()
+    for corr in corrs:
+        parts = sorted(corr.parts)
+        for a in range(len(parts)):
+            for b in range(a + 1, len(parts)):
+                pairs.add((parts[a], parts[b]))
+    return pairs
+
+
+def hue_binding_violations(scenes: Scene | Sequence[Scene], style: Style,
+                           corrs: Iterable[Correspondence] = (),
+                           ) -> list[Diagnostic]:
+    """One hue, one named object — the reader's index into a composite.
+
+    `scenes` is one Scene or a figure's panels in order. `corrs` are the
+    declared correspondences, if any: the panel pairs they cover belong to
+    the residual, and only those are stepped around.
+    """
+    from .theme import CORRESPONDENCE
+
+    parts = [scenes] if isinstance(scenes, Scene) else list(scenes)
+    per_panel = [_panel_inks(sc, style) for sc in parts]
+    covered = _covered_pairs(corrs)
+    multi = len(parts) > 1
+    diags: list[Diagnostic] = []
+    split_within: set[str] = set()
+
+    def split(where: str, key: str, drawn: str, n: int) -> Diagnostic:
+        return Diagnostic("hue-split", (
+            f"{where}key {key!r} is one object drawn in {n} inks — {drawn}. "
+            f"A hue names an object; two hues on one name read as two "
+            f"objects. Give every mark of {key!r} the same color, or split "
+            f"the key."))
+
+    for i, inks in enumerate(per_panel):
+        where = f"panel[{i}] " if multi else ""
+        for key, seen in sorted(inks.items()):
+            if len(seen) > 1:
+                split_within.add(key)
+                diags.append(split(where, key, ", ".join(sorted(seen)), len(seen)))
+
+    # Across panels: the same key wearing different ink in two panels no
+    # declared correspondence binds.
+    for key in sorted({k for inks in per_panel for k in inks} - split_within):
+        drifts = [(i, j) for i in range(len(parts)) for j in range(i + 1, len(parts))
+                  if (i, j) not in covered
+                  and key in per_panel[i] and key in per_panel[j]
+                  and per_panel[i][key] != per_panel[j][key]]
+        if not drifts:
+            continue
+        shown = sorted({i for pair in drifts for i in pair})
+        drawn = ", ".join(f"panel[{i}] {'/'.join(sorted(per_panel[i][key]))}"
+                          for i in shown)
+        diags.append(Diagnostic("hue-split", (
+            f"key {key!r} changes ink across panels — {drawn}. The hue is how "
+            f"the reader carries the object over the panel boundary; recolour "
+            f"so {key!r} is one hue everywhere, or declare the pair in a "
+            f"Correspondence and let the residual name what varies.")))
+
+    # Collision: pooled, and only the categorical channel. A bare '#rrggbb'
+    # is not claiming identity, and ramp/shade hues are ordered quantity.
+    owners: dict[str, set[str]] = {}
+    for scene in parts:
+        for key, color in _hue_marks(scene, style):
+            if getattr(color, "channel", None) == CORRESPONDENCE:
+                owners.setdefault(str(color).lower(), set()).add(key)
+    for color, keys in sorted(owners.items()):
+        if len(keys) > 1:
+            named = ", ".join(repr(k) for k in sorted(keys))
+            diags.append(Diagnostic("hue-collision", (
+                f"correspondence hue {color} names {len(keys)} objects — "
+                f"{named}. The hue is the reader's index into the figure, so "
+                f"one hue must mean one thing everywhere. Give each object "
+                f"its own categorical slot, or key them as the same object.")))
     return diags
 
 

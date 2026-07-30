@@ -157,6 +157,33 @@ class TestDashChannel:
         assert "stroke-dasharray" not in solid  # solid strips the role's dash
 
 
+class TestVectorPullBack:
+    def test_pull_back_px_retracts_head_and_shaft_in_canvas_px(self):
+        # Drawing-only: Vector.tip stays the semantic target; the drawn
+        # head stops pull_back_px short of it, in CANVAS px (glyph math is
+        # canvas-px, the arrowhead precedent).
+        from svgkit import svg_root
+
+        def render(pb):
+            svg = to_svg(Scene(items=[Vector((0.0, 0.0), (1.0, 0.0),
+                                             pull_back_px=pb)],
+                               xlim=(0, 1), ylim=(-1, 1)), DEFAULT_STYLE)
+            root = svg_root(svg)
+            path = next(e for e in root.iter()
+                        if e.get("d", "").startswith("M"))
+            poly = next(e for e in root.iter()
+                        if e.get("class") == "arrowhead")
+            shaft_end_x = float(path.get("d").split("L")[1].split()[0])
+            tip_x = max(float(p.split(",")[0])
+                        for p in poly.get("points").split())
+            return shaft_end_x, tip_x
+
+        s0, t0 = render(0.0)
+        s1, t1 = render(10.0)
+        assert s0 - s1 == pytest.approx(10.0, abs=1e-6)
+        assert t0 - t1 == pytest.approx(10.0, abs=1e-6)
+
+
 class TestGhostVector:
     def test_open_head_uses_background_fill(self):
         svg = to_svg(Scene(items=[Vector((0.0, 0.0), (1.0, 0.0), filled=False)],

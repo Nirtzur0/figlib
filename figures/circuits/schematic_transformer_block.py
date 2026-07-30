@@ -61,13 +61,21 @@ the layout IS the content and there is no numerics to fall back on.
    colour gate exempts because the line is then the mark carrying the
    contrast, over a wash at 0.10 that only has to be findable. Louder than
    the corpus, and the corpus value is unavailable on grained paper.
-8. HONESTY. This is one block with multi-head attention drawn as a single
-   box: heads, the QKV projections, the softmax, the MLP's inner width and
-   nonlinearity, dropout, and the final LayerNorm a pre-norm stack needs
-   at the top are all absent. It also draws the attention sublayer as if
-   it saw one position, when the whole point of attention is that it reads
-   OTHER positions' streams — this is a single column for a single token,
-   and that is the figure's main lie.
+8. HONESTY. Two of the elisions are now DRAWN instead of confessed here.
+   The attention box carries `stack=2` ghost cards: one box abbreviating
+   n heads, said on the page. And the stream above x_{l+1} continues on a
+   `truncated` edge — hollow diamond, ellipsis — because the block
+   repeats and the subscript alone was carrying that silently. Still
+   absent and still only confessed: the QKV projections, the softmax, the
+   MLP's inner width and nonlinearity, dropout, and the final LayerNorm a
+   pre-norm stack needs at the top. It also draws the attention sublayer
+   as if it saw one position, when the whole point of attention is that it
+   reads OTHER positions' streams — this is a single column for a single
+   token, and that is the figure's main lie. No QK junction and no mono
+   token strip, deliberately: the figure's claim is about what is on the
+   residual stream, the attention box is a single abbreviated node (that
+   is what the stack says), and nothing drawn here is literal model input
+   — x_l is a mid-stack activation, not a token.
 9. GATES. Numerical = the structural asserts below: the drawn y-order
    agrees with the DAG's longest-path ranking (no edge runs backwards),
    NO SUBLAYER GROUND straddles the spine lane (the pre-norm claim, made
@@ -154,9 +162,11 @@ PARAMS = {
     "tap_frac": 0.45,          # read height, as a fraction of the rank gap
     "spine_width": 2.2,        # THE object: weight, not hue
     "branch_width": 1.0,
+    "attn_stack": 2,           # ghost cards: the box abbreviates n heads
+    "trunc_len_px": 44.0,      # the drawn stub of the continuing depth axis
     "expected_crossings": 0,
     "xlim": (-1.0, 1.0),       # pins the px-per-unit scale; see compute()
-    "ylim": (-0.09, 2.00),
+    "ylim": (-0.09, 2.22),
 }
 
 
@@ -187,9 +197,16 @@ def compute(p):
                    for k in branch_keys), 0.0)
     nodes: dict[str, sch.Node] = {}
     for k in branch_keys:
+        # the attention box abbreviates n heads: ghost cards, not a caption.
+        # This figure's flow is upward, so the default down-right cards
+        # would sit on the incoming edge and swallow its arrowhead; up-right
+        # cards recede along the OUTGOING edge instead — the branch visibly
+        # emerges from behind the stack.
         nodes[k] = sch.auto_node(k, pos[k], lab[k], scale=scale, size_pt=size_pt,
                                  pad_px=p["box_pad_px"], min_size=box_min,
-                                 fill=RISO.background)
+                                 fill=RISO.background,
+                                 stack=p["attn_stack"] if k == "attn" else 0,
+                                 stack_dir=(1.0, 1.0))
     for k in ("in", "out"):
         w, h = sch.auto_size(lab[k], scale, size_pt, p["pill_pad_px"],
                              (u(p["pill_min_px"][0]), u(p["pill_min_px"][1])))
@@ -209,6 +226,13 @@ def compute(p):
     chain = p["spine"]
     for i, (a, b) in enumerate(zip(chain, chain[1:]), start=1):
         edges.append(sch.connect(nodes[a], nodes[b], key=f"spine{i}", **spine_kw))
+    # the depth axis continues: the block REPEATS, and that used to ride
+    # silently on the subscript. A truncated stub past x_{l+1} draws it —
+    # hollow diamond, ellipsis: "goes on, deliberately stopped here"
+    top = nodes["out"].port("top")
+    edges.append(sch.edge(top, (top[0], top[1] + u(p["trunc_len_px"])),
+                          truncated=True, px_per_unit=scale,
+                          key="spine-continue", **spine_kw))
     # d_model on the first segment, in the empty gutter opposite branch 1
     e = edges[0]
     e.label, e.label_role = dm, Role.ANNOTATION
@@ -339,6 +363,22 @@ def assertions(g):
     branch = [e for e in edges if not e.key.startswith("spine")]
     c.check(min(e.width_scale for e in spine) > max(e.width_scale for e in branch),
             "the residual stream is not the heaviest ink in the figure")
+    # the truncation stub is spine ink continuing the same line: it must
+    # leave x_{l+1}'s top edge, stay on the lane, run upward, and its
+    # ellipsis must land inside the declared limits (rank layout, not the
+    # stub, decides where out's top is — so this CAN drift)
+    depth = by_key["spine-continue"]
+    c.check(np.allclose(depth.pts[:, 0], x_spine, atol=1e-12),
+            f"the depth stub is not on the spine lane at x = {x_spine}")
+    c.check(abs(depth.anchors[0][1] - nodes["out"].rect[3]) < 1e-9,
+            "the depth stub does not leave x_{l+1}'s top edge")
+    c.check(depth.anchors[1][1] > depth.anchors[0][1],
+            "the depth stub does not continue upward")
+    c.check(depth.width_scale == p["spine_width"],
+            "the depth stub is not drawn at stream weight — it reads as "
+            "an annotation, not the same line continuing")
+    c.check(depth.anchors[1][1] + 4.0 * u(sch.TRUNC_DIAMOND_HALF_PX) < g["ylim"][1],
+            "the truncation mark escapes the declared ylim")
     chain = p["spine"]
     for e, (a, b) in zip(spine, zip(chain, chain[1:])):
         c.check(abs(e.anchors[0][1] - nodes[a].rect[3]) < 1e-9,
@@ -366,7 +406,8 @@ def assertions(g):
                 f"{add} has {len(incoming)} inputs, not (stream + {sub})")
 
     # --- schematic checks ---------------------------------------------------
-    ported = [e for e in edges if not e.key.startswith("read->")]
+    ported = [e for e in edges
+              if not e.key.startswith("read->") and e.key != "spine-continue"]
     off = sch.max_port_offset(ported, node_list)
     c.check(off < 1e-9, f"port attachment off the box boundary by {off:.3g}")
     for e in edges:

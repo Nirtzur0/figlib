@@ -114,6 +114,11 @@ class Vector:
     tip: XY
     role: Role = Role.CONTENT
     width_scale: float = 1.0
+    # Draw the head this many CANVAS px short of `tip`, along the shaft.
+    # Drawing-only: `tip` stays the semantic target (leaders that should
+    # point AT a glyph without landing ON it). Canvas px like the head
+    # itself — the retraction is ink, not geometry.
+    pull_back_px: float = 0.0
     # False -> ghost copy: paper-filled head and shaft outline (the
     # white-original / black-image convention of amplitwist figures)
     filled: bool = True
@@ -154,6 +159,10 @@ class MathLabel:
     # paper-colored casing behind the glyphs so the label stays legible on
     # busy ink (cartographic halo). Skipped on transparent themes.
     halo: bool = False
+    # typographic REGISTER — a semantic channel, not appearance:
+    # "mono" = literal model input / data, "sans" = human interpretation,
+    # None = mathematics. See typeset.apply_register.
+    register: str | None = None
     # this label's position IS meaning (e.g. text along a curve): the
     # auto-place pass never moves it, collisions fall to the gate
     pin: bool = False
@@ -199,6 +208,10 @@ class Brace:
     side: float = 1.0
     depth: float | None = None     # math units; None -> 6% of the span
     label: str | None = None
+    # "mono" | "sans" (typeset.apply_register): a derivation brace speaks
+    # sans. Rides the resolved MathLabel, so render ink and gate metrics
+    # stay identical — brace_ink is the single resolver for both.
+    label_register: str | None = None
     role: Role = Role.ANNOTATION
     # correspondence name: the marks that ARE the same object across the
     # parts of a composite figure share a key. Renders nothing; it is what

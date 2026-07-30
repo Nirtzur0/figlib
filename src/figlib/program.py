@@ -129,10 +129,17 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
                       autoplace_figure(built, style, width_px=width_px)]
         diags += mechanical_figure(built, style, width_px=width_px)
         diags += color_gate_figure(built, style)
+        corrs = getattr(mod, "CORRESPONDENCE", None)
+        # Hue is a referential noun: pooled across panels, no declaration
+        # needed — a hue that names two things is broken whether or not the
+        # figure claims a correspondence. The declarations are passed in only
+        # so the panel pairs the residual owns are not reported twice.
+        from .correspond import hue_binding_violations
+        diags += hue_binding_violations([p.scene for p in built.panels], style,
+                                        corrs or ())
         # Composite figures only: the residual against a declared binding.
         # Silent when a program declares none, so a figure whose parts are
         # independent is not forced to invent a relation between them.
-        corrs = getattr(mod, "CORRESPONDENCE", None)
         if corrs:
             from .correspond import residual
             diags += residual(built, corrs, style, width_px=width_px)
@@ -143,6 +150,8 @@ def run(program: str | Path | ModuleType, out_dir: str | Path | None = None,
                       autoplace(built, style, width_px=width_px)]
         diags += mechanical(built, style, width_px=width_px)
         diags += color_gate(built, style)
+        from .correspond import hue_binding_violations
+        diags += hue_binding_violations(built, style)
         svg_path, png_path = save(built, out / stem, style, width_px=width_px)
 
     # The load gate's advice is computed, not asserted: evaluate whether a

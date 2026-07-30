@@ -15,9 +15,13 @@ WRITING A FIGURE
     format      MARGIN | COLUMN | WIDE page slots; canvas units are CSS px
     figure      Figure/Panel/Connector — multi-panel page grammar
     correspond  Correspondence — what a composite holds fixed; the residual
+    inset       embed() — word-scale scene-in-scene: affine map of a small
+                scene's items into host math coords (a producer)
     geometry    compute-layer numerics that generate geometry
     builders    compute-side emitters (grids, streamlines, level ladders)
     plots       data plots as scene items: Axes, scales, series, bands
+    derivation  annotated derivation rows — terms at real typeset widths,
+                operators midway, sans glosses hung beneath (a producer)
     schematic   Class B: typed Node/Port/Edge + a ranked layout pass
     matrix      matrices as Blocks drawn at their own aspect ratio;
                 structure/value encoders, the expression row, shape gates

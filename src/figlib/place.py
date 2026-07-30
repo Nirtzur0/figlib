@@ -115,8 +115,8 @@ def _tangent_deg(canvas: np.ndarray, i: int) -> float:
 
 
 def _label_box(latex: str, pt: float, cx: float, cy: float, ha: str, va: str,
-               angle_deg: float) -> Box:
-    box = _box_at(latex, pt, cx, cy, ha, va)
+               angle_deg: float, register: str | None = None) -> Box:
+    box = _box_at(latex, pt, cx, cy, ha, va, register)
     return _rotate_box(box, cx, cy, angle_deg) if angle_deg else box
 
 
@@ -125,6 +125,7 @@ def place_on_locus(scene: Scene, style: Style, latex: str,
                    size_pt: float | None = None, ha: str = "center",
                    va: str = "center", angle_from_tangent: bool = False,
                    angles: Sequence[float] | None = None,
+                   register: str | None = None,
                    ) -> Placement:
     """The candidate on `locus` with the most room, measured exactly.
 
@@ -143,6 +144,10 @@ def place_on_locus(scene: Scene, style: Style, latex: str,
     * `angles`, one per candidate, when the caller knows the true
       orientation. A word set in a 3-D plane knows its tangent from the
       projection; the library would only be guessing it back off the page.
+
+    `register` must match the register the label will finally carry —
+    the candidate boxes are typeset with it, and a mono strip is wider
+    than the serif measurement of the same string.
 
     The scene is not modified; build the label from the returned
     `Placement` (or `Placement.label`).
@@ -168,7 +173,8 @@ def place_on_locus(scene: Scene, style: Style, latex: str,
             ang = _readable(float(angles[i]))
         else:
             ang = _tangent_deg(canvas, i) if angle_from_tangent else 0.0
-        box = _label_box(latex, pt_size, float(cx), float(cy), ha, va, ang)
+        box = _label_box(latex, pt_size, float(cx), float(cy), ha, va, ang,
+                         register)
         c = _clearance(box, corridors, boxes)
         if c > best_c:                      # strict: ties keep the lower index
             best_i, best_c, best_a = i, c, ang

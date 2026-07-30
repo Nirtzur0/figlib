@@ -16,14 +16,15 @@ from .layout import Transform
 from .render import brace_ink, callout_ink
 from .scene import Brace, Callout, Curve, MathLabel, Point, Scene, Vector
 from .style import Role, Style
-from .typeset import label_box, render_math
+from .typeset import apply_register, label_box, render_math
 
 
 @dataclass(frozen=True)
 class Diagnostic:
     kind: str    # 'label-collision' | 'clipped' | 'tiny-label' | 'label-scale'
                  # | 'annotation-load' | 'numerical' | 'faint-ink' | 'hue-collapse'
-                 # | 'label-on-ink' | 'arrow-on-mark'
+                 # | 'label-on-ink' | 'arrow-on-mark' | 'hue-split'
+                 # | 'hue-collision'
     detail: str
 
 
@@ -41,9 +42,16 @@ LabelBox = tuple[str, float, tuple[float, float, float, float]]
 
 
 def _box_at(latex: str, size_pt: float, x: float, y: float,
-            ha: str, va: str) -> tuple[float, float, float, float]:
-    """Exact typeset bbox anchored at canvas (x, y)."""
-    return label_box(latex, size_pt, x, y, ha, va)
+            ha: str, va: str,
+            register: str | None = None) -> tuple[float, float, float, float]:
+    """Exact typeset bbox anchored at canvas (x, y).
+
+    THE measurement choke point: every label box in the library comes
+    through here, so applying the register once here is what keeps the
+    gate's boxes on the ink the renderer draws. The geometry itself lives
+    in typeset.label_box — the casing and the gate share one definition,
+    so they cannot disagree about where a label is."""
+    return label_box(apply_register(latex, register), size_pt, x, y, ha, va)
 
 
 def _rotate_box(box: tuple[float, float, float, float], cx: float, cy: float,
@@ -67,7 +75,7 @@ def _canvas_label_box(it: MathLabel, style: Style) -> LabelBox:
     pt = style.label_pt(it.size_pt)
     x = it.anchor[0] + it.offset_px[0]
     y = it.anchor[1] + it.offset_px[1]
-    box = _box_at(it.latex, pt, x, y, it.ha, it.va)
+    box = _box_at(it.latex, pt, x, y, it.ha, it.va, it.register)
     if it.angle_deg:
         box = _rotate_box(box, x, y, it.angle_deg)
     return (it.latex, pt, box)
@@ -90,7 +98,7 @@ def _label_entries(scene: Scene, style: Style, t: Transform) -> list[LabelEntry]
             x, y = t.to_canvas(it.anchor)
             x += it.offset_px[0]
             y += it.offset_px[1]
-            box = _box_at(it.latex, pt, x, y, it.ha, it.va)
+            box = _box_at(it.latex, pt, x, y, it.ha, it.va, it.register)
             if it.angle_deg:
                 box = _rotate_box(box, x, y, it.angle_deg)
             entries.append(((it.latex, pt, box), it))

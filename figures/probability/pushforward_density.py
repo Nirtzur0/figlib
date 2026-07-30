@@ -157,14 +157,15 @@ def _panel(g, mapped: bool) -> Scene:
     cells = g["img_cells"] if mapped else g["src_cells"]
     density = g["img_density"] if mapped else g["src_density"]
     s = Scene()
-    for idx, (cell, rho) in enumerate(zip(cells, density)):
-        key = None
-        if idx == g["i_expand"]:
-            key = "expanded-cell"
-        elif idx == g["i_compress"]:
-            key = "compressed-cell"
+    for cell, rho in zip(cells, density):
+        # UNKEYED, deliberately: a fill here is coloured by DENSITY, so its ink
+        # rides the order ramp. Naming it 'compressed-cell' would put two
+        # channels under one name -- the ramp's #b15319 and the accent's
+        # #c8402f -- and a hue that names an object cannot also encode a
+        # magnitude. The identity of the two annotated cells is carried by the
+        # accent outlines below, which is the only mark whose hue means "which".
         s.add(FilledCurve(cell, role=Role.CONTENT, opacity=1.0, outline=True,
-                          color=THEME.ramp(_t(rho, g)), key=key))
+                          color=THEME.ramp(_t(rho, g))))
     # accent outlines pick the two annotated cells out of the wash, tracked
     # by the SAME hue across both panels so "this is the same cell" is a
     # correspondence read, not a caption

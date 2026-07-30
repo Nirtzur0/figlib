@@ -33,7 +33,7 @@ import numpy as np
 
 from .scene import Curve, FilledCurve, Item, MathLabel
 from .style import Role
-from .typeset import render_math
+from .typeset import apply_register, render_math
 
 XY = tuple[float, float]
 # A port spec is "left" | "top@0.25" | ("right", 0.8).
@@ -44,7 +44,14 @@ _SIDES = ("left", "right", "bottom", "top")
 # states every other coordinate. Override per edge.
 BAR_HALF = 0.12       # half-length of an `inhibit` edge's flat terminal bar
 CHEVRON_GAP = 0.15    # spacing between the stacked heads of a `copy` edge
-TRUNC_DIAMOND_HALF = 0.10   # half-diagonal of a truncated edge's terminator
+
+# The truncation diamond is the exception: it is a terminator GLYPH, read
+# against the arrowheads next to it, so it is sized in CANVAS px like
+# `style.arrowhead_len` — a math-units default varied wildly with figure
+# scale. Resolved at emission through the edge's `px_per_unit` (the same
+# scale `label_overflow` already needs); `Edge.trunc_half` remains a
+# math-units override.
+TRUNC_DIAMOND_HALF_PX = 6.0   # half-diagonal of a truncated edge's terminator
 
 # A junction's argument labels sit at this multiple of its own radius —
 # dimensionless for the same reason STACK_OFFSET is: the gap has to read
@@ -225,10 +232,15 @@ class Node(_Box):
     fill: str | None = None            # paper colour, or None for an open box
     label_role: Role | None = None     # None -> the node's own role
     label_size_pt: float | None = None
+    label_register: str | None = None  # "mono" | "sans"; see typeset.apply_register
     label_offset_px: XY = (0.0, 0.0)
     width_scale: float = 1.0
     n_arc: int = 6
     stack: int = 0                     # ghost cards behind the box: "one of many"
+    stack_dir: XY = (1.0, -1.0)        # ghost-card direction, signs of (dx, dy):
+                                       # default down-right; an upward-flow
+                                       # schematic wants (+1, +1) so the cards
+                                       # recede along the OUTGOING edge
     dash: str | None = None            # provisional outline; see `unknown_node`
 
     @property
@@ -261,14 +273,16 @@ class Node(_Box):
         # body paints over all of them. MUTED because a ghost is the same
         # object off-focus — grammar.md's off-focus channel exactly.
         d0 = STACK_OFFSET * min(abs(self.width), abs(self.height))
+        sx, sy = self.stack_dir
         for k in range(int(self.stack), 0, -1):
-            out += self._card(pts + [k * d0, -k * d0], Role.MUTED)
+            out += self._card(pts + [k * d0 * sx, k * d0 * sy], Role.MUTED)
         out += self._card(pts, self.role)
         if self.label:
             out.append(MathLabel(self.label, self.center,
                                  role=self.label_role or self.role,
                                  ha="center", va="center",
                                  size_pt=self.label_size_pt,
+                                 register=self.label_register,
                                  offset_px=self.label_offset_px))
         return out
 
@@ -325,6 +339,7 @@ class Junction:
     fill: str | None = None            # paper colour, as on `Node`
     label_role: Role | None = None     # None -> the junction's own role
     label_size_pt: float | None = None
+    label_register: str | None = None  # "mono" | "sans"; see typeset.apply_register
     arg_role: Role = Role.ANNOTATION
     arg_size_pt: float | None = None   # None -> the style's annotation size
     n_arc: int = 12
@@ -382,7 +397,8 @@ class Junction:
         out.append(MathLabel(self.glyph, self.center,
                              role=self.label_role or self.role,
                              ha="center", va="center",
-                             size_pt=self.label_size_pt))
+                             size_pt=self.label_size_pt,
+                             register=self.label_register))
         out += [self._arg_label(a, latex) for a, latex in self.args]
         return out
 
@@ -555,12 +571,15 @@ class Edge:
     truncated: bool = False
     bar_half: float = BAR_HALF
     chevron_gap: float = CHEVRON_GAP
-    trunc_half: float = TRUNC_DIAMOND_HALF
+    trunc_half: float | None = None    # math-units override of the diamond size
+    px_per_unit: float | None = None   # canvas px per math unit (px_per_unit());
+                                       # sizes the truncation diamond
     label: str | None = None
     label_at: float = 0.5              # arc-length fraction, unless...
     label_anchor: XY | None = None     # ...an explicit point is given
     label_role: Role | None = None
     label_size_pt: float | None = None
+    label_register: str | None = None  # "mono" | "sans"; see typeset.apply_register
     label_ha: str = "center"
     label_va: str = "bottom"
     label_offset_px: XY = (0.0, 0.0)
@@ -610,17 +629,29 @@ class Edge:
     def _truncation_mark(self) -> list[Item]:
         """Hollow diamond on the tip, `\\cdots` just past it.
 
-        Literal points, not derived ink: the diamond is stated in math
-        units like the `inhibit` bar, so it scales with the schematic and
-        no canvas-px resolver in render.py has to know it exists.
+        The diamond is a terminator glyph, so its size is CANVAS px
+        (`TRUNC_DIAMOND_HALF_PX`, the arrowhead precedent), resolved here
+        at emission through `px_per_unit` — no resolver in render.py has
+        to know it exists. Its stroke is capped at content weight
+        (width_scale 1.0): a heavy edge's inherited stroke would fill the
+        hole, and a self-filled hollow diamond is a different mark.
         """
+        if self.trunc_half is not None:
+            h = self.trunc_half
+        elif self.px_per_unit:
+            h = TRUNC_DIAMOND_HALF_PX / self.px_per_unit
+        else:
+            raise ValueError(
+                "truncated edge needs a scale for its diamond: pass "
+                "px_per_unit (canvas px per math unit — "
+                "schematic.px_per_unit(xlim, format.display_width_px)) "
+                "or a math-units trunc_half override")
         tip, u, nrm = self._terminal_tangent()
-        h = self.trunc_half
         dia = np.vstack([tip + h * u, tip + h * nrm, tip - h * u, tip - h * nrm])
         lab = tip + 2.5 * h * u
         return [Curve(dia, role=self.role, color=self.color,
                       opacity=self.opacity, closed=True, dash="solid",
-                      width_scale=self.width_scale * self.decor.width_scale),
+                      width_scale=min(1.0, self.width_scale * self.decor.width_scale)),
                 MathLabel(r"\cdots", (float(lab[0]), float(lab[1])),
                           role=Role.ANNOTATION, ha="center", va="center")]
 
@@ -644,6 +675,7 @@ class Edge:
                                  role=self.label_role or self.role,
                                  ha=self.label_ha, va=self.label_va,
                                  size_pt=self.label_size_pt,
+                                 register=self.label_register,
                                  offset_px=self.label_offset_px,
                                  halo=self.label_halo))
         return out
@@ -816,10 +848,12 @@ def items(*objs) -> list[Item]:
 # --- schematic checks (assertion helpers, not magic) ------------------------
 
 
-def label_extent_px(latex: str, size_pt: float = 11.0) -> tuple[float, float]:
+def label_extent_px(latex: str, size_pt: float = 11.0,
+                    register: str | None = None) -> tuple[float, float]:
     """Exact typeset (width, height) in canvas px — the same metrics the
-    mechanical gate boxes with."""
-    m = render_math(latex, size_pt)
+    mechanical gate boxes with. `register` must be the label's own, or a
+    mono label measures narrow and the fit check lies."""
+    m = render_math(apply_register(latex, register), size_pt)
     return m.width_px, m.height_px
 
 
@@ -842,7 +876,8 @@ def label_overflow(nodes: Sequence[Node], scale: float, size_pt: float,
     for nd in nodes:
         if not nd.label:
             continue
-        w, h = label_extent_px(nd.label, nd.label_size_pt or size_pt)
+        w, h = label_extent_px(nd.label, nd.label_size_pt or size_pt,
+                               nd.label_register)
         bw, bh = nd.width * scale, nd.height * scale
         if w + pad_px > bw or h + pad_px > bh:
             bad.append(f"{nd.key}: label {w:.0f}x{h:.0f}px in a "
@@ -1312,13 +1347,15 @@ AUTO_PAD_PX: XY = (26.0, 22.0)
 
 def auto_size(latex: str, scale: float, size_pt: float = 11.0,
               pad_px: XY = AUTO_PAD_PX,
-              min_size: XY = (0.0, 0.0)) -> tuple[float, float]:
+              min_size: XY = (0.0, 0.0),
+              register: str | None = None) -> tuple[float, float]:
     """(width, height) in MATH units for a box holding `latex` with padding.
 
     `scale` is px per math unit (`px_per_unit`). `min_size` is what makes a
     column of boxes uniform: size each label, take the max, pass it back in.
+    `register` must be the label's own — a mono run is ~20% wider.
     """
-    w_px, h_px = label_extent_px(latex, size_pt)
+    w_px, h_px = label_extent_px(latex, size_pt, register)
     return (max((w_px + float(pad_px[0])) / scale, float(min_size[0])),
             max((h_px + float(pad_px[1])) / scale, float(min_size[1])))
 
@@ -1327,9 +1364,13 @@ def auto_node(key: str, center: XY, label: str, *, scale: float,
               size_pt: float = 11.0, pad_px: XY = AUTO_PAD_PX,
               min_size: XY = (0.0, 0.0), **kw) -> Node:
     """`Node` whose size is `auto_size(label, ...)`; everything else passes
-    through. `label_size_pt` in **kw is honored for the measurement too."""
+    through. `label_size_pt` and `label_register` in **kw are honored for
+    the measurement too — a box sized registerless around a mono label is
+    ~20% narrow, and `label_overflow` would then flag a node the author
+    never mis-sized."""
     pt = kw.get("label_size_pt") or size_pt
-    w, h = auto_size(label, scale, pt, pad_px, min_size)
+    w, h = auto_size(label, scale, pt, pad_px, min_size,
+                     kw.get("label_register"))
     return Node(key, center, w, h, label=label, **kw)
 
 

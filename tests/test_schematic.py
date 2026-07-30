@@ -837,6 +837,18 @@ class TestElisionStack:
     def test_stack_offset_is_a_tenth_of_the_short_side(self):
         assert sch.STACK_OFFSET == pytest.approx(0.10)
 
+    def test_stack_dir_defaults_to_down_right(self):
+        assert sch.Node("n", (0.0, 0.0), 2.0, 1.0).stack_dir == (1.0, -1.0)
+
+    def test_stack_dir_up_right_flips_the_ghost_offsets(self):
+        # An upward-flow schematic wants ghosts receding along the OUTGOING
+        # edge; up-right is that direction, stated as a sign pair.
+        n = sch.Node("n", (0.0, 0.0), 4.0, 2.0, stack=2, stack_dir=(1.0, 1.0))
+        curves = [it for it in n.items() if isinstance(it, (Curve, FilledCurve))]
+        off = sch.STACK_OFFSET * min(4.0, 2.0)
+        assert np.allclose(curves[1].pts, curves[2].pts + [off, off])
+        assert np.allclose(curves[0].pts, curves[2].pts + [2 * off, 2 * off])
+
     def test_no_stack_is_the_untouched_single_box(self):
         assert len(sch.Node("n", (0.0, 0.0), 2.0, 1.0).items()) == 1
 
@@ -888,8 +900,13 @@ class TestUnknownMechanismNode:
 
 
 class TestDeclaredTruncation:
+    # 60 px per math unit makes the default diamond half-diagonal
+    # TRUNC_DIAMOND_HALF_PX / 60 = 0.1 math units — round numbers below.
+    PXU = 60.0
+
     def test_truncated_edge_has_no_head_but_a_diamond_and_an_ellipsis(self):
-        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True)
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True,
+                     px_per_unit=self.PXU)
         its = e.items()
 
         main = its[0]
@@ -906,29 +923,64 @@ class TestDeclaredTruncation:
                            atol=1e-9)
 
     def test_the_diamond_is_hollow_and_axis_aligned_to_the_terminal_tangent(self):
-        e = sch.edge((0.0, 0.0), (0.0, 4.0), "map", truncated=True)
+        e = sch.edge((0.0, 0.0), (0.0, 4.0), "map", truncated=True,
+                     px_per_unit=self.PXU)
         (dia,) = [it for it in e.items() if isinstance(it, Curve) and it.closed]
 
-        h = sch.TRUNC_DIAMOND_HALF
+        h = sch.TRUNC_DIAMOND_HALF_PX / self.PXU
         # hollow: a stroked closed Curve, not a FilledCurve
         assert not any(isinstance(it, FilledCurve) for it in e.items())
         # tangent is +y here, so the vertices are the tip +/- h along x and y
         assert sorted(map(tuple, np.round(dia.pts, 12))) == [
             (-h, 4.0), (0.0, 4.0 - h), (0.0, 4.0 + h), (h, 4.0)]
 
-    def test_the_ellipsis_sits_past_the_tip_along_the_tangent(self):
+    def test_the_diamond_is_sized_in_canvas_px_like_an_arrowhead(self):
+        # Doubling px-per-unit halves the math-unit size: the RENDERED
+        # diamond is the constant, not the math one.
+        def half(pxu):
+            e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True,
+                         px_per_unit=pxu)
+            (dia,) = [it for it in e.items()
+                      if isinstance(it, Curve) and it.closed]
+            return float(dia.pts[:, 0].max() - 10.0)
+        assert half(2.0 * self.PXU) == pytest.approx(0.5 * half(self.PXU))
+        assert half(self.PXU) == pytest.approx(
+            sch.TRUNC_DIAMOND_HALF_PX / self.PXU)
+
+    def test_trunc_half_stays_as_a_math_units_override(self):
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True,
+                     px_per_unit=self.PXU, trunc_half=0.25)
+        (dia,) = [it for it in e.items() if isinstance(it, Curve) and it.closed]
+        assert float(dia.pts[:, 0].max()) == pytest.approx(10.25)
+
+    def test_truncated_edge_without_a_scale_fails_loudly(self):
         e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True)
+        with pytest.raises(ValueError, match="px_per_unit"):
+            e.items()
+
+    def test_the_diamond_stroke_is_capped_at_content_weight(self):
+        # At heavy edge weight an inherited stroke self-fills the hollow
+        # diamond; the cap keeps hollow hollow. A LIGHT edge keeps its own.
+        def dia_width(ws):
+            e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True,
+                         px_per_unit=self.PXU, width_scale=ws)
+            main, dia = [it for it in e.items() if isinstance(it, Curve)]
+            assert main.width_scale == pytest.approx(ws)
+            return dia.width_scale
+        assert dia_width(2.2) == pytest.approx(1.0)
+        assert dia_width(0.8) == pytest.approx(0.8)
+
+    def test_the_ellipsis_sits_past_the_tip_along_the_tangent(self):
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True,
+                     px_per_unit=self.PXU)
         (lb,) = [it for it in e.items() if isinstance(it, MathLabel)]
         assert lb.role is Role.ANNOTATION
-        assert lb.anchor == pytest.approx((10.0 + 2.5 * sch.TRUNC_DIAMOND_HALF, 0.0))
-
-    def test_diamond_half_diagonal_is_in_math_units_like_the_bar(self):
-        # BAR_HALF's units: math, not px. A diamond an order of magnitude
-        # bigger than the inhibit bar would be a different mark entirely.
-        assert 0.2 * sch.BAR_HALF < sch.TRUNC_DIAMOND_HALF < 5.0 * sch.BAR_HALF
+        h = sch.TRUNC_DIAMOND_HALF_PX / self.PXU
+        assert lb.anchor == pytest.approx((10.0 + 2.5 * h, 0.0))
 
     def test_a_truncated_inhibit_drops_its_terminal_bar_too(self):
-        e = sch.edge((0.0, 0.0), (3.0, 0.0), "inhibit", truncated=True)
+        e = sch.edge((0.0, 0.0), (3.0, 0.0), "inhibit", truncated=True,
+                     px_per_unit=self.PXU)
         closed = [it for it in e.items() if isinstance(it, Curve) and it.closed]
         assert len(closed) == 1                      # only the diamond
         # the 2-point bar is gone: main curve + diamond, nothing else stroked
@@ -941,7 +993,8 @@ class TestDeclaredTruncation:
         assert len(e.items()) == 1
 
     def test_a_truncated_edge_keeps_its_own_label(self):
-        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True, label="f")
+        e = sch.edge((0.0, 0.0), (10.0, 0.0), "map", truncated=True,
+                     px_per_unit=self.PXU, label="f")
         latexes = [it.latex for it in e.items() if isinstance(it, MathLabel)]
         assert "f" in latexes and any(r"\cdots" in x for x in latexes)
 

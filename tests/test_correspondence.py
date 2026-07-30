@@ -241,3 +241,268 @@ def test_a_single_scene_figure_gets_the_plain_prompt():
     from figlib.readback import prompt_for
     assert "BINDING" not in prompt_for("x.png", Scene())
     assert "BINDING" not in prompt_for("x.png")
+
+
+# --- hue as a referential noun -----------------------------------------------
+#
+# One hue, one named object. Two ways that binding breaks: the same object
+# wearing two hues (hue-split), and two objects wearing one correspondence
+# hue (hue-collision). Both are read at a glance, so both are gated.
+
+def _hues():
+    from figlib.theme import CLEAN
+    return CLEAN
+
+
+def _hue_diags(*scenes, style=None, corrs=()):
+    from figlib.correspond import hue_binding_violations
+    return hue_binding_violations(list(scenes), style or _hues(), corrs)
+
+
+def test_same_key_two_colors_is_a_hue_split():
+    th = _hues()
+    sc = Scene(items=[_arc(key="branch", color=th.categorical(0)),
+                      _arc(shift=1.0, key="branch", color=th.categorical(1))])
+    diags = _hue_diags(sc)
+    assert _kinds(diags) == ["hue-split"]
+    assert "branch" in diags[0].detail
+
+
+def test_two_keys_one_categorical_hue_is_a_collision():
+    th = _hues()
+    sc = Scene(items=[_arc(key="input", color=th.categorical(0)),
+                      _arc(shift=1.0, key="output", color=th.categorical(0))])
+    diags = _hue_diags(sc)
+    assert _kinds(diags) == ["hue-collision"]
+    assert "input" in diags[0].detail and "output" in diags[0].detail
+
+
+def test_collision_is_pooled_across_panels():
+    """Correspondence is exactly what has to hold ACROSS the parts — one hue
+    used for two different objects in two panels is the failure the gate is
+    for."""
+    th = _hues()
+    a = Scene(items=[_arc(key="input", color=th.categorical(0))])
+    b = Scene(items=[_arc(key="residual-flow", color=th.categorical(0))])
+    assert _kinds(_hue_diags(a, b)) == ["hue-collision"]
+
+
+def test_the_same_object_in_the_same_hue_across_panels_is_clean():
+    th = _hues()
+    a = Scene(items=[_arc(key="probe", color=th.categorical(0))])
+    b = Scene(items=[_arc(shift=2.0, key="probe", color=th.categorical(0))])
+    assert _hue_diags(a, b) == []
+
+
+def test_unkeyed_items_never_fire():
+    """An unkeyed decorative use of the categorical channel is not a claim
+    about identity, so it cannot break one."""
+    th = _hues()
+    sc = Scene(items=[_arc(color=th.categorical(0)),
+                      _arc(shift=1.0, color=th.categorical(0)),
+                      _arc(shift=2.0, key="probe", color=th.categorical(1))])
+    assert _hue_diags(sc) == []
+
+
+def test_non_hue_colors_do_not_collide():
+    """A bare hex is not claiming identity — only the categorical channel is
+    the referential-noun channel. Ramp and shade hues are ordered quantity."""
+    th = _hues()
+    sc = Scene(items=[_arc(key="a", color="#3467a3"), _arc(key="b", color="#3467a3"),
+                      _arc(key="c", color=th.ramp(0.5)), _arc(key="d", color=th.ramp(0.5))])
+    assert _hue_diags(sc) == []
+
+
+def test_a_split_fires_on_bare_hexes_too():
+    """Split is about the RESOLVED color, whatever channel produced it: one
+    object drawn in two inks reads as two objects."""
+    sc = Scene(items=[_arc(key="branch", color="#3467a3"),
+                      _arc(shift=1.0, key="branch", color="#a33434")])
+    assert _kinds(_hue_diags(sc)) == ["hue-split"]
+
+
+def test_split_falls_through_to_the_role_ink():
+    """Resolution mirrors render: item override, else the Role's ink."""
+    sc = Scene(items=[_arc(key="branch", color="#3467a3"),
+                      _arc(shift=1.0, key="branch", role=Role.CONTENT)])
+    assert _kinds(_hue_diags(sc)) == ["hue-split"]
+
+
+def test_color_case_does_not_split_an_object():
+    sc = Scene(items=[_arc(key="branch", color="#3467A3"),
+                      _arc(shift=1.0, key="branch", color="#3467a3")])
+    assert _hue_diags(sc) == []
+
+
+def test_an_explicitly_hued_label_participates():
+    """A colored label is exactly where hue-as-noun is read — it is the label
+    that tells the reader which noun the hue names."""
+    th = _hues()
+    sc = Scene(items=[MathLabel("u", (0.0, 0.0), key="input",
+                                role=Role.ANNOTATION, color=th.categorical(0)),
+                      MathLabel("v", (1.0, 0.0), key="output",
+                                role=Role.ANNOTATION, color=th.categorical(0))])
+    assert _kinds(_hue_diags(sc)) == ["hue-collision"]
+
+
+def test_an_explicitly_hued_label_can_split_its_own_object():
+    th = _hues()
+    sc = Scene(items=[_arc(key="input", color=th.categorical(0)),
+                      MathLabel("u", (0.0, 0.0), key="input",
+                                role=Role.ANNOTATION, color=th.categorical(1))])
+    assert _kinds(_hue_diags(sc)) == ["hue-split"]
+
+
+def test_scaffolding_roles_without_a_color_never_participate():
+    """CONSTRUCTION / ANNOTATION / FRAME ink is not a hue claim: it is the
+    ink that recedes, and it is shared by everything wearing that role."""
+    th = _hues()
+    sc = Scene(items=[_arc(key="probe", color=th.categorical(0)),
+                      _arc(shift=1.0, key="probe", role=Role.CONSTRUCTION),
+                      _arc(shift=2.0, key="probe", role=Role.FRAME)])
+    assert _hue_diags(sc) == []
+
+
+def test_annotation_riding_a_keyed_object_is_not_a_second_hue():
+    """A keyed group spans the mark AND its annotation (demo_panels_zsquared
+    keys a Curve, an AngleMark and a label together). Annotation ink is text
+    ink, not a hue claim about the object."""
+    th = _hues()
+    sc = Scene(items=[_arc(key="tracked-ray", color=th.categorical(0)),
+                      MathLabel(r"\theta_0", (0.0, 0.0), key="tracked-ray",
+                                role=Role.ANNOTATION)])
+    assert _hue_diags(sc) == []
+
+
+def test_cross_panel_split_fires_when_nothing_is_declared():
+    """The residual only runs under a declared CORRESPONDENCE. An undeclared
+    composite is exactly where the reader has no legend to fall back on, so
+    the hue check cannot be the thing that opts out."""
+    th = _hues()
+    a = Scene(items=[_arc(key="probe", color=th.categorical(0))])
+    b = Scene(items=[_arc(key="probe", color=th.categorical(1))])
+    diags = _hue_diags(a, b)
+    assert _kinds(diags) == ["hue-split"]
+    assert "probe" in diags[0].detail
+    assert "panel[0]" in diags[0].detail and "panel[1]" in diags[0].detail
+
+
+def test_a_declared_correspondence_owns_the_panel_pairs_it_covers():
+    """Inside a declared binding the residual reports the same drift, with
+    the fix the author needs (repaint, or add the key to changes=). Reporting
+    it twice makes the fix ambiguous."""
+    th = _hues()
+    a = Scene(items=[_arc(key="probe", color=th.categorical(0))])
+    b = Scene(items=[_arc(key="probe", color=th.categorical(1))])
+    corr = Correspondence(parts=(0, 1), varies="the map")
+    assert _hue_diags(a, b, corrs=[corr]) == []
+
+
+def test_a_key_declared_in_changes_is_still_the_residuals_business():
+    th = _hues()
+    a = Scene(items=[_arc(key="probe", color=th.categorical(0))])
+    b = Scene(items=[_arc(key="probe", color=th.categorical(1))])
+    corr = Correspondence(parts=(0, 1), varies="the map", changes=("probe",))
+    assert _hue_diags(a, b, corrs=[corr]) == []
+
+
+def test_a_panel_outside_the_declared_parts_is_still_checked():
+    """A correspondence over parts (0, 1) says nothing about panel 2."""
+    th = _hues()
+    a = Scene(items=[_arc(key="probe", color=th.categorical(0))])
+    b = Scene(items=[_arc(key="probe", color=th.categorical(0))])
+    c = Scene(items=[_arc(key="probe", color=th.categorical(1))])
+    corr = Correspondence(parts=(0, 1), varies="the map")
+    diags = _hue_diags(a, b, c, corrs=[corr])
+    assert _kinds(diags) == ["hue-split"]
+    assert "panel[2]" in diags[0].detail
+
+
+def test_a_clean_figure_reports_nothing():
+    th = _hues()
+    a = Scene(items=[_arc(key="input", color=th.categorical(0)),
+                     _arc(shift=1.0, key="output", color=th.categorical(1))])
+    b = Scene(items=[_arc(shift=2.0, key="input", color=th.categorical(0))])
+    assert _hue_diags(a, b) == []
+
+
+def test_a_bare_scene_is_accepted_too():
+    from figlib.correspond import hue_binding_violations
+    th = _hues()
+    sc = Scene(items=[_arc(key="a", color=th.categorical(0)),
+                      _arc(shift=1.0, key="b", color=th.categorical(0))])
+    assert _kinds(hue_binding_violations(sc, th)) == ["hue-collision"]
+
+
+_HUE_PROGRAM = '''
+import numpy as np
+from figlib.correspond import Correspondence
+from figlib.figure import Figure, Panel
+from figlib.scene import Curve, Scene
+from figlib.style import Role
+from figlib.theme import CLEAN
+
+THEME = CLEAN
+CLAIM = "A hue names an object."
+# the runner gates EXPOSITION, and this fixture exercises the hue gate through
+# the real runner — so it has to satisfy the whole contract, not part of it
+EXPOSITION = """
+Two curves drawn in two categorical hues are two objects; the same curve
+redrawn in a second hue is one object wearing two names, which is what the
+hue gate exists to catch. This toy carries just enough of a figure to drive
+that gate through the real runner rather than around it.
+"""
+PARAMS = {}
+
+def _arc(shift):
+    t = np.linspace(0.0, 1.0, 8)
+    return np.column_stack([t + shift, t ** 2])
+
+def compute(p):
+    return None
+
+def build(g):
+    return SCENE
+
+def assertions(g):
+    pass
+'''
+
+
+def _run_program(tmp_path, scene_src: str):
+    """Drive a violating figure through the real runner — the wiring claim is
+    that the diagnostic reaches the Report, not that the source mentions it."""
+    from figlib.program import run
+    prog = tmp_path / "toy_hue.py"
+    prog.write_text(_HUE_PROGRAM + scene_src)
+    return run(prog, out_dir=tmp_path / "out")
+
+
+def test_the_runner_reports_a_split_in_a_single_scene(tmp_path):
+    report = _run_program(tmp_path, """
+SCENE = Scene(items=[Curve(_arc(0.0), key="branch", color=CLEAN.categorical(0)),
+                     Curve(_arc(1.0), key="branch", color=CLEAN.categorical(1))],
+              xlim=(-1.0, 3.0), ylim=(-1.0, 3.0))
+""")
+    assert [d.kind for d in report.diagnostics] == ["hue-split"]
+    assert not report.passed
+
+
+def test_the_runner_reports_a_cross_panel_split_with_nothing_declared(tmp_path):
+    report = _run_program(tmp_path, """
+def _panel(c):
+    return Panel(Scene(items=[Curve(_arc(0.0), key="probe", color=c)],
+                       xlim=(-1.0, 3.0), ylim=(-1.0, 3.0)))
+
+SCENE = Figure(panels=[_panel(CLEAN.categorical(0)), _panel(CLEAN.categorical(1))])
+""")
+    assert "hue-split" in [d.kind for d in report.diagnostics]
+
+
+def test_the_runner_is_silent_on_a_clean_figure(tmp_path):
+    report = _run_program(tmp_path, """
+SCENE = Scene(items=[Curve(_arc(0.0), key="input", color=CLEAN.categorical(0)),
+                     Curve(_arc(1.0), key="output", color=CLEAN.categorical(1))],
+              xlim=(-1.0, 3.0), ylim=(-1.0, 3.0))
+""")
+    assert report.passed, report.summary()

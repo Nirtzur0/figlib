@@ -153,9 +153,13 @@ renders — or browse [**the full gallery**](figures/out/GALLERY.md).
 
 <p><sub>demo_basin_wash · demo_ou_ensemble_field</sub></p>
 
-<p><a href="figures/out/GALLERY.md#diffusion_ode_vs_sde"><img src="figures/out/dynamics/diffusion_ode_vs_sde.png" alt="diffusion_ode_vs_sde" height="240"></a> <a href="figures/out/GALLERY.md#strogatz_saddle_node"><img src="figures/out/dynamics/strogatz_saddle_node.png" alt="strogatz_saddle_node" height="240"></a></p>
+<p><a href="figures/out/GALLERY.md#diffusion_ode_vs_sde"><img src="figures/out/dynamics/diffusion_ode_vs_sde.png" alt="diffusion_ode_vs_sde" height="196"></a> <a href="figures/out/GALLERY.md#saddle_node_behavior_map"><img src="figures/out/dynamics/saddle_node_behavior_map.png" alt="saddle_node_behavior_map" height="196"></a></p>
 
-<p><sub>diffusion_ode_vs_sde · strogatz_saddle_node</sub></p>
+<p><sub>diffusion_ode_vs_sde · saddle_node_behavior_map</sub></p>
+
+<p align="center"><a href="figures/out/GALLERY.md#strogatz_saddle_node"><img src="figures/out/dynamics/strogatz_saddle_node.png" alt="strogatz_saddle_node" height="299"></a></p>
+
+<p align="center"><sub>strogatz_saddle_node</sub></p>
 
 ### optim
 
@@ -169,9 +173,13 @@ renders — or browse [**the full gallery**](figures/out/GALLERY.md).
 
 *Densities under maps, and where the mass really lives.*
 
-<p><a href="figures/out/GALLERY.md#concentration_of_measure"><img src="figures/out/probability/concentration_of_measure.png" alt="concentration_of_measure" height="227"></a> <a href="figures/out/GALLERY.md#pushforward_density"><img src="figures/out/probability/pushforward_density.png" alt="pushforward_density" height="227"></a></p>
+<p><a href="figures/out/GALLERY.md#concentration_of_measure"><img src="figures/out/probability/concentration_of_measure.png" alt="concentration_of_measure" height="218"></a> <a href="figures/out/GALLERY.md#prml_polyfit_multiples"><img src="figures/out/probability/prml_polyfit_multiples.png" alt="prml_polyfit_multiples" height="218"></a></p>
 
-<p><sub>concentration_of_measure · pushforward_density</sub></p>
+<p><sub>concentration_of_measure · prml_polyfit_multiples</sub></p>
+
+<p align="center"><a href="figures/out/GALLERY.md#pushforward_density"><img src="figures/out/probability/pushforward_density.png" alt="pushforward_density" height="299"></a></p>
+
+<p align="center"><sub>pushforward_density</sub></p>
 
 ### statmech
 
@@ -196,6 +204,10 @@ renders — or browse [**the full gallery**](figures/out/GALLERY.md).
 <p><a href="figures/out/GALLERY.md#induction_head_circuit"><img src="figures/out/circuits/induction_head_circuit.png" alt="induction_head_circuit" height="251"></a> <a href="figures/out/GALLERY.md#qk_circuit_tensor"><img src="figures/out/circuits/qk_circuit_tensor.png" alt="qk_circuit_tensor" height="251"></a></p>
 
 <p><sub>induction_head_circuit · qk_circuit_tensor</sub></p>
+
+<p><a href="figures/out/GALLERY.md#qk_score_derivation"><img src="figures/out/circuits/qk_score_derivation.png" alt="qk_score_derivation" height="203"></a></p>
+
+<p><sub>qk_score_derivation</sub></p>
 
 <p align="center"><a href="figures/out/GALLERY.md#schematic_transformer_block"><img src="figures/out/circuits/schematic_transformer_block.png" alt="schematic_transformer_block" height="299"></a></p>
 

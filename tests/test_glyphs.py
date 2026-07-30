@@ -52,6 +52,18 @@ class TestBrace:
         e1, e2 = t.to_canvas((2.0, 5.0)), t.to_canvas((8.0, 5.0))
         assert cpts[0][0] == pytest.approx(e1[0]) and cpts[-1][0] == pytest.approx(e2[0])
 
+    def test_label_register_threads_through_brace_ink(self):
+        # brace_ink is the single resolver: render draws and the gate boxes
+        # the SAME MathLabel, so putting the register on it keeps drawn
+        # metrics and gate metrics identical (both apply apply_register).
+        scene = box_scene(Brace((2, 5), (8, 5), label="head",
+                                label_register="sans"))
+        t = Transform(scene, width_px=900)
+        _, lab = brace_ink(scene.items[1], t, DEFAULT_STYLE)
+        assert lab.register == "sans"
+        _, plain = brace_ink(Brace((2, 5), (8, 5), label="x"), t, DEFAULT_STYLE)
+        assert plain.register is None
+
     def test_default_depth_is_six_percent_of_span(self):
         _, _, n, d = Brace((0, 0), (10, 0)).frame()
         assert d == pytest.approx(0.6)
