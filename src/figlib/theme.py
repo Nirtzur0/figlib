@@ -287,7 +287,9 @@ RISO = Theme(
     background="#ffffff",
     paper=("#ffffff", "#f6f4f1"),
     # Level-curve ramp, re-stepped to stay monotone in L *and* above the
-    # stroke floor on cream: the old light end (#e9c46a) was 1.27:1, so the
+    # stroke floor on the cream stock this theme used to print on (kept as
+    # RISO_CREAM; the white default only loosens the constraint, so the snap
+    # still holds): the old light end (#e9c46a) was 1.27:1, so the
     # low-k level curves were effectively unprinted. The cost is a narrower
     # lightness range (L 0.60->0.38 instead of 0.83->0.38), so hue rotation
     # now carries more of the order signal than lightness alone.
@@ -299,7 +301,8 @@ RISO = Theme(
     # palette available but collapse against each other under deuteranopia
     # (sage/coral/brick sit at ΔE 1.8-4.7), so past four hues identity must
     # ride a second channel. Each hue was snapped to clear 3:1 on the cream
-    # paper by moving lightness and chroma only, holding the hue angle —
+    # stock (see above; white is the easier ground) by moving lightness and
+    # chroma only, holding the hue angle —
     # mustard was at 1.27:1, effectively invisible in print.
     categorical_stops=["#373b67",   # indigo
                        "#a17814",   # ochre  (was #e9c46a, 1.27:1)

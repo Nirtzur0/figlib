@@ -47,7 +47,7 @@ class Style:
     arrowhead_len: float = 10.0
     arrowhead_halfwidth: float = 3.6
     background: str = "white"
-    # The theme's cream paper, its grain, and label casings ride the render by
+    # The theme's paper stock, its grain, and label casings ride the render by
     # DEFAULT: the figure is a printed page, and the contrast gate only earns
     # its keep on a ground that is actually there. Opt out with
     # `transparent_variant(theme)` or `figcheck --transparent` for ink on alpha

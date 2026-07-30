@@ -56,11 +56,12 @@ restyles the entire corpus.
 
 - **CLEAN** — white paper, near-black ink, restrained blue/red accents.
   For contexts where the figure sits inside dense text.
-- **RISO** — the house look. Warm cream paper with a subtle vertical
-  gradient, printed-grain overlay, sun-bleached saturated palette
+- **RISO** — the house look. White stock with a barely-warm vertical
+  falloff, printed-grain overlay, sun-bleached saturated palette
   (indigo / brick / mustard / sage / plum), 3D facets shaded through a
   multi-hue ramp rather than dark→light. Risograph / Anthropic-circuits
-  adjacent: granular, warm, flat-but-dimensional.
+  adjacent: granular, warm, flat-but-dimensional. `RISO_CREAM` keeps the
+  original cream stock as a named variant.
 
 Semantic channels a theme must provide (this is the whole interface):
 
@@ -70,21 +71,21 @@ Semantic channels a theme must provide (this is the whole interface):
 | `ramp(t)` | ordered quantity → color | level k, radius, height |
 | `categorical(i)` | correspondence hue | same ray before/after a map |
 | `surface_shade(t)` | 3D facet lighting → color | the volcano ramp |
-| `paper`, `grain` | ground and texture | riso cream + speckle |
+| `paper`, `grain` | ground and texture | riso white stock + speckle |
 
-**No ground by default.** `Style.transparent` is `True`: a render emits ink
-on alpha, no paper rect, no page-wide grain overlay. A figure is meant to land
-on whatever document embeds it, and the ground is that document's decision.
-Two things are *not* ground and survive: grain inside a fill
+**The ground is on by default.** `Style.transparent` is `False`: a figure is
+a printed page, and the contrast gate only earns its keep against a ground
+that is actually there. Dropping it emits ink on alpha — no paper rect, no
+page-wide grain overlay — for a document that owns its own background.
+Two things are *not* ground and survive that: grain inside a fill
 (`FilledCurve.grain`), and the paper-coloured erasers — casings, halos,
 hollow marker fills, callout backing. An eraser needs an opaque colour to
 be an eraser, so groundless it paints white (`render._ground`), matching the
 hostile ground `paper_stops()` already assumes. Cost: embed on a dark page
 and those read as white patches. The colour-free fix is an alpha knockout
 mask, which the renderer does not do yet.
-The theme's own ground is the DEFAULT. To drop it: `transparent_variant(THEME)`,
-the prebuilt `RISO_CLEAR` / `CLEAN_CLEAR`, or `figcheck --transparent`, which
-writes `<name>_transparent.svg`. `--regress` checks both grounds for every
+To drop it: `transparent_variant(THEME)`, the prebuilt
+`RISO_CLEAR` / `CLEAN_CLEAR`, or `figcheck --transparent`, which writes `<name>_transparent.svg`. `--regress` checks both grounds for every
 figure, unconditionally. The contrast gate assumes white under a groundless
 render — the hostile case for light ink.
 

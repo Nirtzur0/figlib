@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="print the cold-reader prompt for the rendered PNG")
     ap.add_argument("--transparent", action="store_true",
                     help="render ink on alpha: no paper rect, no casings. The "
-                         "default is the theme's cream ground (grain rides "
+                         "default is the theme's paper ground (grain rides "
                          "both — it is ink, not paper)")
     ap.add_argument("--paper", action="store_true",
                     help=argparse.SUPPRESS)   # deprecated: now the default

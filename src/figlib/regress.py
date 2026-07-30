@@ -148,7 +148,7 @@ def compare_figure(program_path: str | Path, out_dir: str | Path,
 
 
 def variants(program_path: Path, out_dir: Path) -> list[bool]:
-    """Both grounds, always: the theme's cream paper (the default, `<name>`)
+    """Both grounds, always: the theme's paper stock (the default, `<name>`)
     and the groundless render for embedding in a document
     (`<name>_transparent`). Unconditional, so a figure cannot quietly stop
     being checked against the ground its contrast gate assumes."""
