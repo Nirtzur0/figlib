@@ -2,13 +2,16 @@
   <img src="docs/brand/wordmark.png" alt="figlib — figures as gated programs" width="420">
 </p>
 
-<p align="center"><b>The procedure that decides what to draw, and the compiler that checks what got drawn.</b></p>
+<p align="center"><b>An agent skill for scientific figures — and the library it draws with.</b><br>
+<sub>Reason about what to draw, build it as a program, prove it says what it claims.</sub></p>
 
 <p align="center">
+  <a href="#install-the-skill">Install</a> ·
+  <a href="#what-the-library-draws">What it draws</a> ·
   <a href="#quickstart">Quickstart</a> ·
-  <a href="#gallery">Gallery</a> ·
   <a href="#what-gets-decided-before-any-code">How it decides</a> ·
   <a href="#what-the-compiler-checks">What it checks</a> ·
+  <a href="#gallery">Gallery</a> ·
   <a href="docs/skill.md">Docs</a>
 </p>
 
@@ -21,78 +24,120 @@ The graph of 1/(1+x²) is the tranquil real slice of a surface that erupts at z 
 
 ---
 
-A plotting library starts work after the two decisions that determine whether
-the figure was worth making: **what to draw**, and **whether what got drawn is
-true**. matplotlib will cheerfully render an arrowhead pointing the wrong way,
-at 6 pt, in a yellow that vanishes on the page. It has no opinion, because it
-was never told what the picture is supposed to argue.
+Ask a coding agent for a figure today and you get a matplotlib script. It
+will run, it will produce a picture, and nothing in the loop can tell you
+whether the arrowhead points the right way, whether the type is legible at
+the size it will be read, or whether the picture argues the thing you meant.
+The agent can't tell either — it never sees the render.
 
-figlib is the layer above. Two halves, and both are load-bearing:
+figlib is the missing loop. It is a **skill an agent loads** plus **the
+library that skill writes against**, and together they make a figure something
+a model can reason about, build, and verify:
 
-- **A design procedure** — ten steps, run before any code, that turn "I need a
-  figure of X" into a claim, a representation, a page slot, a reading order,
-  and a gate plan. This is the part that decides quality, and it is written to
-  be executed by a model, not admired by a human.
-- **A compiler** — the figure is a program that computes its own geometry and
-  declares assertions about it. `compute → build → autoplace → gates → render`
-  emits SVG and PNG, and refuses to emit anything that fails.
+- **Reason.** A ten-step design procedure runs *before* any code — earn the
+  figure, name the claim, pick the representation and the abstraction rung,
+  script the read, assign the perceptual channels, plan the gates. It is
+  written as prompts, so it costs a model almost nothing to run every time.
+- **Build.** A figure is a program: `compute → build → autoplace → gates →
+  render`. Curves and fields, 3D surfaces, multi-panel pages, schematics,
+  matrices, tensor diagrams, derivations — all in one scene model, so every
+  gate and every theme applies to all of it.
+- **Verify.** The program declares assertions about the arrays it plotted.
+  Layout, colour and contrast are checked mechanically, and each failure comes
+  back as a *computed fix* — `offset_px += (+0, -13)`, not "labels overlap".
+  Then a second agent, given only the PNG and no context, says what the figure
+  claims. If that misses the claim, the figure is wrong however pretty it is.
 
-The loop closes because every gate returns a *computed fix* rather than a
-complaint, and the last gate is a second model reading the PNG cold. An agent
-can drive the whole thing — propose, check, repair, verify by re-reading —
-without a human in the middle deciding whether the picture looks right.
+That last step is the point. Nothing else in an agent's toolchain closes the
+loop between "I drew it" and "it says what I meant."
 
-It ships as the `scientific-figures` skill, so the procedure travels with the
-library into any project on the machine.
-
-## Install
+## Install the skill
 
 Python 3.12+, [uv](https://docs.astral.sh/uv/), and cairo.
 
 ```bash
-brew install cairo          # or your platform's cairo
+brew install cairo                                     # or your platform's
 git clone https://github.com/Nirtzur0/figlib && cd figlib
 uv sync && make test
+
+uv tool install --editable .                           # figcheck on PATH
+
+SKILL=~/.claude/skills/scientific-figures                # or ~/.codex/skills/…
+mkdir -p "$SKILL/references"
+ln -s "$PWD/docs/skill.md" "$SKILL/SKILL.md"
+ln -s "$PWD/docs/"{architecture,grammar,exposition,corpus-study}.md \
+      "$SKILL/references/"
 ```
 
-To author figures from *other* projects without those projects depending on
-figlib, install the checker as a standalone tool — `figcheck` then loads a
-figure program into its own environment and writes next to it:
+Symlinks, not copies: the repo stays the single source, so a change to the
+design step reaches every project on the machine the moment it is committed.
 
-```bash
-uv tool install --editable .
-```
+The host project takes **no dependency on figlib** — `figcheck` loads a figure
+program into its own environment and writes the artifacts next to it. So the
+skill works in a paper repo, a blog, a lecture course, a notebook project:
+ask for a figure, and one lands in `figures/`, gated, with its baselines and
+its readback record.
+
+<sub>On macOS, cairo needs `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`;
+wrap `~/.local/bin/figcheck` in two lines that export it, or the render dies
+with an opaque error. The Makefile does this for you inside the repo.</sub>
+
+## What the library draws
+
+One scene model underneath all of it. **New capability enters as a producer of
+scene items, never as a new renderer** — which is why a gate written once
+applies to a phase portrait, a transformer schematic and an einsum diagram
+alike, and why one theme edit restyles every figure ever written.
+
+| | what it gives you | module |
+|---|---|---|
+| **Plane geometry** | curves, filled regions with grain and gradients, points, vectors, braces, callouts, raster fields | `scene` |
+| **Fields and flows** | streamlines from a stream function, level ladders, stagnation points, phase portraits | `builders`, `geometry` |
+| **Data plots** | axes with linear/log scales, series, bands, colorbars — as scene items, so the gates still apply | `plots` |
+| **3D surfaces** | orthographic projection to depth-sorted 2D, chromatic light→shadow ramps in OKLCh, labels anchored in 3-space | `surface3d`, `sphere3d`, `shading` |
+| **Multi-panel pages** | Panel/Connector grammar, plus a *declared* correspondence whose residual is measured — if two things differ between panels, the reader can't attribute either | `figure`, `correspond` |
+| **Schematics** | typed Node/Port/Edge with a ranked layout pass — transformer blocks, circuits, pipelines | `schematic` |
+| **Matrices** | blocks drawn at their own aspect ratio, structure and value encoders, expression rows, shape gates | `matrix` |
+| **Tensor networks** | einsum as a Penrose diagram — and the spec is *derived from the drawing*, then gated against `np.einsum` | `tensor` |
+| **Derivations** | annotated rows: terms at real typeset widths, operators midway, sans glosses hung beneath | `derivation` |
+| **Word-scale insets** | a whole scene affinely embedded in another scene's coordinates | `inset` |
+
+Type is real math: LaTeX through ziamath, with exact metrics, so the collision
+gate measures the glyphs the renderer draws rather than an estimate of them.
 
 ## Quickstart
 
-A figure is one module. This is the whole of
-[`docs/examples/first_figure.py`](docs/examples/first_figure.py) — nothing
-elided:
+A figure is one module — the contract an agent writes to. This is
+[`docs/examples/first_figure.py`](docs/examples/first_figure.py), trimmed only
+of its prose:
 
 ```python
 CLAIM = ("The tangent to y = x^2 at x = a meets the axis at a/2 — the "
          "subtangent is half the abscissa, for every a.")
 
-EXPOSITION = """..."""             # the passage this figure is FOR
+EXPOSITION = """..."""             # the passage this figure is FOR, ≥40 words
+                                   # written BEFORE the code, and gated
 
 FORMAT = COLUMN                    # MARGIN 340 | COLUMN 680 | WIDE 1000 px
 THEME  = RISO
-PARAMS = {"a": 1.5, "xlim": (-0.55, 2.35), ...}   # no magic numbers below
+PARAMS = {"a": 1.5, "xlim": (-0.9, 2.2), ...}     # no magic numbers below
 
 def compute(p):                    # numerics -> arrays. No drawing decisions.
-    a, r = p["a"], p["reach"]
+    a, lo, hi = p["a"], *p["reach"]
     x = np.linspace(*p["curve_x"], 400)
-    t = np.array([a - r, a + r])
+    t = np.array([a - lo, a + hi])
     return {"parabola": np.column_stack([x, x * x]),
             "tangent":  np.column_stack([t, 2.0 * a * (t - a) + a * a]),
             "foot": (a, a * a), "p": p}
 
-def build(g):                      # arrays -> Scene. Roles, never colors.
+def build(g):                      # arrays -> Scene. Roles, never colours.
     s = Scene(xlim=..., ylim=..., height_px=400)
     s.add(Curve(g["parabola"], role=Role.CONTENT))
     s.add(Curve(g["tangent"],  role=Role.ACCENT1))
     s.add(Point(g["foot"], filled=True, role=Role.ACCENT1))
-    s.add(MathLabel(r"a/2", (a / 2.0, 0.0), ha="right", va="top"))
+    s.add(MathLabel(r"(a,\,a^2)", g["foot"], ha="right", va="bottom"))
+    s.add(Brace((a / 2, -0.6), (a, -0.6), side=-1.0,   # the claim, as a LENGTH
+                label=r"\text{subtangent} = \tfrac{a}{2}"))
     return s
 
 def assertions(g):                 # the gate, on the arrays that got drawn
@@ -102,13 +147,13 @@ def assertions(g):                 # the gate, on the arrays that got drawn
 ```
 
 ```
-$ make check F=docs/examples/first_figure.py
+$ figcheck docs/examples/first_figure.py
 
 [PASS] first_figure: The tangent to y = x^2 at x = a meets the axis at a/2 …
   svg: docs/examples/out/first_figure.svg
   png: docs/examples/out/first_figure.png
-  placed: '(a,\,a^2)' offset_px += (+19, +0)
-  placed: 'a/2' offset_px += (-19, +0)
+  placed: '\tfrac{a}{2}' offset_px += (+3, +0)
+  clearance: tightest labels 'y = x^2' 2.2px, '\tfrac{a}{2}' 6.3px
 ```
 
 <p align="center">
@@ -141,11 +186,13 @@ The shape of it:
 | **8 · honesty** | what the depiction lies about — truncated infinities, selected seeds, unequal panel scales — plus the accidental assertions layout makes for free. |
 | **9 · gate plan** | which numerical assertions certify the geometry, and what the cold readback should say. |
 
-This is the part that isn't a plotting library. Steps 0 and 1 routinely
-conclude that the figure should not exist; step 2 is where a good figure and a
-competent one diverge; step 8 is the one nobody does by hand. Encoded as
-prompts, they are cheap to run every time, which is the only reason they get
-run at all.
+This is the half no plotting library has, and the half that decides quality.
+Steps 0 and 1 routinely conclude the figure should not exist; step 2 is where
+a good figure and a competent one diverge; step 8 is the one nobody does by
+hand. A person runs this once, on the figure they care about. An agent runs it
+on every figure, because as prompts it costs almost nothing — which is the
+whole argument for putting the procedure in the skill rather than in a style
+guide someone might read.
 
 ## What the compiler checks
 
@@ -173,6 +220,18 @@ shouldn't silently fix — a pinned label whose position *is* meaning, a move
 past the 24 px budget, which is a design defect wearing a layout defect's
 clothes.
 
+The last gate is the one that can't be computed. `figcheck --readback-prompt`
+emits a prompt for a **second agent that has never seen the claim, the code or
+the conversation** — only the PNG. It says what the figure asserts, what it
+can read off, and what confused it. Every confusion bullet is design review:
+fix it, or write down why you accepted it. The record lands in
+`<name>.readback.md` beside the baselines, and a figure without one is not
+done.
+
+That is the closed loop. Design → program → computed repairs → an independent
+reader. An agent can run all four without a human in the middle deciding
+whether the picture looks right.
+
 ## Semantics, not appearance
 
 `Role.CONTENT`, `theme.ramp(t)`, `theme.categorical(i)`, `theme.surface_shade(t)`.
@@ -194,6 +253,11 @@ background. `figcheck` checks both unconditionally, because a contrast gate
 only earns its keep on a ground that is actually there.
 
 ## Gallery
+
+Every figure below came out of that loop — designed against the ten steps,
+declared as a program, gated, and read back cold by an agent that saw only the
+picture. The readback records are committed next to the baselines, confusions
+and all.
 
 <!-- gallery:start -->
 
@@ -285,6 +349,21 @@ only earns its keep on a ground that is actually there.
 
 ## Commands
 
+In any project, through the installed tool:
+
+```
+figcheck figures/x.py                render + every gate, exit 1 on failure
+         --report                    + a textual layout inventory
+         --zoom x0,y0,x1,y1:4        a magnified crop, for judging detail
+         --readback-prompt           the prompt for the cold-reader agent
+         --transparent               ink on alpha instead of the stock
+figcheck --regress --figures-dir figures    golden diff over THIS project
+figcheck --update  --figures-dir figures    refresh its baselines
+```
+
+Inside this repo, use the make targets — they cover the corpus and export
+cairo's library path, which a bare `uv run figcheck` misses:
+
 ```
 make test                            pytest
 make check F=figures/optim/x.py      render + every gate, exit 1 on failure
@@ -296,9 +375,6 @@ make gallery                         regenerate GALLERY.md + this README grid
 make brand                           redraw the wordmark, mark and social card
 ```
 
-The Makefile exports cairo's library path; a bare `uv run figcheck` misses it
-and fails opaquely.
-
 ## Layout
 
 ```
@@ -308,11 +384,14 @@ figures/<subject>/*.py
                 the corpus: complex · signals · linalg · dynamics · optim ·
                 probability · statmech · infotheory · circuits
 figures/out/    committed render baselines, both grounds, plus readback records
-docs/           skill.md (how to write a figure) · architecture.md (the stack,
-                and the design step) · grammar.md · exposition.md
+docs/skill.md   THE skill — symlinked into ~/.claude/skills and ~/.codex/skills
+docs/           architecture.md (the stack and the design step) · grammar.md
+                (visual rules, each with the failure that justifies it) ·
+                exposition.md (why the design step is what it is)
                 brand/ — the wordmark and social card, drawn by the library
                 they brand (same ink, same grain, same math face)
 tests/
 ```
 
-Start at [`docs/skill.md`](docs/skill.md). It is short, and it is the contract.
+Start at [`docs/skill.md`](docs/skill.md). It is short, it is the contract, and
+it is the file your agent actually loads.
