@@ -83,9 +83,9 @@ class TestRender:
         assert png_file.exists() and png_file.stat().st_size > 500
 
     def test_default_theme_emits_no_ground(self):
-        from figlib.theme import RISO, RISO_PAPER
-        papered = to_svg(make_scene(), RISO_PAPER, width_px=900)
-        clear = to_svg(make_scene(), RISO, width_px=900)
+        from figlib.theme import RISO, RISO_CLEAR
+        papered = to_svg(make_scene(), RISO, width_px=900)
+        clear = to_svg(make_scene(), RISO_CLEAR, width_px=900)
         assert "url(#paper)" in papered and "url(#grain)" in papered
         # Groundless drops the PAPER but keeps the grain: grain is the riso
         # PRINT texture, a property of the ink, not of the sheet. A figure run
@@ -126,8 +126,9 @@ class TestCurveMarkers:
         """A hollow head reads as hollow by covering what it sits on, so it
         keeps an opaque fill even groundless — white, the assumed page."""
         import xml.etree.ElementTree as ET
+        from dataclasses import replace
         svg = to_svg(self._line_scene(arrows=(0.5,), arrow_style="hollow"),
-                     DEFAULT_STYLE, width_px=900)
+                     replace(DEFAULT_STYLE, transparent=True), width_px=900)
         heads = [e for e in ET.fromstring(svg).iter()
                  if e.get("class") == "arrowhead"]
         assert len(heads) == 1 and heads[0].get("fill") == "#ffffff"

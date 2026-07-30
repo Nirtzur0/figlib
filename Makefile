@@ -9,7 +9,7 @@ help:
 	@echo '  F may carry flags: F="figures/x.py --report"'
 	@echo '  flags: --report --zoom X0,Y0,X1,Y1[:S] --readback-prompt'
 	@echo '         --paper --no-autoplace --width PX'
-	@echo 'make gallery                   regenerate figures/out/GALLERY.md'
+	@echo 'make gallery                   regenerate GALLERY.md + README grid'
 	@echo 'make regress                   corpus golden diff (exit 1 on drift)'
 	@echo 'make update [F=figures/x.py]   refresh committed svg+png baselines'
 

@@ -119,12 +119,12 @@ def _pixel_metrics(baseline_svg: Path, fresh_svg: Path) -> tuple[float, float, s
 
 
 def compare_figure(program_path: str | Path, out_dir: str | Path,
-                   paper: bool = False) -> RegressResult:
+                   paper: bool = True) -> RegressResult:
     """Render `program_path` to scratch and compare against the committed
     SVG in `out_dir`. Pure with respect to `out_dir`: nothing is written."""
     program_path = Path(program_path)
     out_dir = Path(out_dir)
-    name = program_path.stem + ("_paper" if paper else "")
+    name = program_path.stem + ("" if paper else "_transparent")
     baseline = out_dir / f"{name}.svg"
 
     with tempfile.TemporaryDirectory() as td:
@@ -148,11 +148,11 @@ def compare_figure(program_path: str | Path, out_dir: str | Path,
 
 
 def variants(program_path: Path, out_dir: Path) -> list[bool]:
-    """Both grounds, always: the groundless render for embedding in a document,
-    and the theme's own cream paper for standing alone. Sniffing for an
-    existing `_paper` baseline (the old rule) meant a figure that had never
-    been papered could never start being papered."""
-    return [False, True]
+    """Both grounds, always: the theme's cream paper (the default, `<name>`)
+    and the groundless render for embedding in a document
+    (`<name>_transparent`). Unconditional, so a figure cannot quietly stop
+    being checked against the ground its contrast gate assumes."""
+    return [True, False]
 
 
 def sweep(figures_dir: str | Path, out_dir: str | Path | None = None,

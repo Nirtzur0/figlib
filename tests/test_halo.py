@@ -70,8 +70,9 @@ def test_halo_rect_covers_the_label_box():
 def test_transparent_render_has_no_casing():
     """style.transparent means ink on alpha: a casing in the ground colour is
     an opaque blob once the ground is gone."""
-    root = svg_root(to_svg(_scene(halo=True), style=RISO))
-    assert RISO.transparent is True
+    from figlib.theme import RISO_CLEAR
+    root = svg_root(to_svg(_scene(halo=True), style=RISO_CLEAR))
+    assert RISO_CLEAR.transparent is True
     assert _casings(root, "#ffffff") == []
     assert _white_stroked(root) == []
 

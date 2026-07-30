@@ -82,10 +82,10 @@ be an eraser, so groundless it paints white (`render._ground`), matching the
 hostile ground `paper_stops()` already assumes. Cost: embed on a dark page
 and those read as white patches. The colour-free fix is an alpha knockout
 mask, which the renderer does not do yet.
-To get the theme's own ground back: `opaque_variant(THEME)`, the prebuilt
-`RISO_PAPER` / `CLEAN_PAPER`, or `figcheck --paper`. A `--paper` render
-writes `<name>_paper.svg`, and `--regress` picks that variant up iff such a
-baseline is committed. The contrast gate assumes white under a groundless
+The theme's own ground is the DEFAULT. To drop it: `transparent_variant(THEME)`,
+the prebuilt `RISO_CLEAR` / `CLEAN_CLEAR`, or `figcheck --transparent`, which
+writes `<name>_transparent.svg`. `--regress` checks both grounds for every
+figure, unconditionally. The contrast gate assumes white under a groundless
 render — the hostile case for light ink.
 
 Rules: hue = correspondence, lightness = order, accent = the

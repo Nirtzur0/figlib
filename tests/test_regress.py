@@ -171,8 +171,8 @@ def test_sweep_finds_baselines_in_subject_subdirs(tmp_path):
     (figs / "complex").mkdir(parents=True)
     prog = figs / "complex" / "toy_regress.py"
     prog.write_text(TOY)
-    run(prog, out_dir=figs / "out" / "complex")
     run(prog, out_dir=figs / "out" / "complex", paper=True)
+    run(prog, out_dir=figs / "out" / "complex", paper=False)
 
     # both grounds are committed for every program, so the sweep compares two
     results = sweep(figs)

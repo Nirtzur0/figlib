@@ -89,9 +89,10 @@ class TestLabelOnInk:
         """No ground, no casing — so the declaration buys nothing and the
         label must be placed clear like any other. The gate must not stay
         silent about ink it is no longer covering."""
+        from dataclasses import replace
         scene = _diagonal_scene(self._label(halo=True, pin=True))
-        assert DEFAULT_STYLE.transparent is True
-        hits = [d for d in mechanical(scene, DEFAULT_STYLE)
+        clear = replace(DEFAULT_STYLE, transparent=True)
+        hits = [d for d in mechanical(scene, clear)
                 if d.kind == "label-on-ink"]
         assert hits
         assert "halo=True" not in hits[0].detail, \

@@ -88,10 +88,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="override the figure's declared FORMAT width (CSS px)")
     ap.add_argument("--readback-prompt", action="store_true",
                     help="print the cold-reader prompt for the rendered PNG")
-    ap.add_argument("--paper", action="store_true",
-                    help="render the theme's paper ground, grain and casings; "
-                         "the default is no ground (SVG+PNG keep alpha)")
     ap.add_argument("--transparent", action="store_true",
+                    help="render ink on alpha: no paper rect, no casings. The "
+                         "default is the theme's cream ground (grain rides "
+                         "both — it is ink, not paper)")
+    ap.add_argument("--paper", action="store_true",
                     help=argparse.SUPPRESS)   # deprecated: now the default
     ap.add_argument("--no-autoplace", action="store_true",
                     help="skip the label auto-place pass (raw declared offsets)")
@@ -117,8 +118,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.gallery:
         from pathlib import Path
 
-        from .gallery import write_gallery
-        print(f"gallery: {write_gallery(Path(args.figures_dir))}")
+        from .gallery import write_gallery, write_readme_gallery
+        figures_dir = Path(args.figures_dir)
+        print(f"gallery: {write_gallery(figures_dir)}")
+        # The README's thumbnail grid is the same metadata at a different
+        # grain; regenerating one without the other lets them disagree.
+        readme = figures_dir.parent / "README.md"
+        if readme.exists():
+            print(f"gallery: {write_readme_gallery(readme, figures_dir)}")
         return 0
     if args.regress or args.update:
         return _regress_main(args)
@@ -146,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         pass
     report = run(program, out_dir=out_dir, width_px=args.width,
-                 paper=args.paper, place=not args.no_autoplace)
+                 paper=not args.transparent, place=not args.no_autoplace)
     print(report.summary())
     if args.report:
         from .report import report as layout_report

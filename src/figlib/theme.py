@@ -326,21 +326,23 @@ RISO = Theme(
 
 
 def transparent_variant(theme: Theme) -> Theme:
-    """The same ink and palettes, no paper — the default; kept as an
-    explicit spelling for code that wants to force it."""
+    """The same ink and palettes, no paper: ink on alpha, for a figure whose
+    embedding document owns the background. Grain still rides — it is ink."""
     from dataclasses import replace
     return replace(theme, transparent=True)
 
 
 def opaque_variant(theme: Theme) -> Theme:
     """The theme's own ground: paper gradient, grain, casings and halos.
-    Opt-in, for a figure that stands alone rather than embedding."""
+    This is the default; kept as an explicit spelling."""
     from dataclasses import replace
     return replace(theme, transparent=False)
 
 
-RISO_PAPER = opaque_variant(RISO)
+RISO_PAPER = opaque_variant(RISO)      # == RISO; the ground is now the default
 CLEAN_PAPER = opaque_variant(CLEAN)
+RISO_CLEAR = transparent_variant(RISO)
+CLEAN_CLEAR = transparent_variant(CLEAN)
 
 # Back-compat: transparency is now the default, so these are the base themes.
 RISO_T = RISO
