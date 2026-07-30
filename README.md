@@ -1,6 +1,8 @@
-<h1 align="center">figlib</h1>
+<p align="center">
+  <img src="docs/brand/wordmark.png" alt="figlib — figures as gated programs" width="420">
+</p>
 
-<p align="center"><b>Figures as gated programs — and the design procedure that decides what to draw.</b></p>
+<p align="center"><b>The procedure that decides what to draw, and the compiler that checks what got drawn.</b></p>
 
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
@@ -49,7 +51,7 @@ Python 3.12+, [uv](https://docs.astral.sh/uv/), and cairo.
 
 ```bash
 brew install cairo          # or your platform's cairo
-git clone https://github.com/nirtzur/sci-figures && cd sci-figures
+git clone https://github.com/Nirtzur0/figlib && cd figlib
 uv sync && make test
 ```
 
@@ -291,6 +293,7 @@ make check F=figures/optim/x.py      render + every gate, exit 1 on failure
 make regress                         corpus-wide golden diff
 make update                          refresh the committed baselines
 make gallery                         regenerate GALLERY.md + this README grid
+make brand                           redraw the wordmark, mark and social card
 ```
 
 The Makefile exports cairo's library path; a bare `uv run figcheck` misses it
@@ -307,6 +310,8 @@ figures/<subject>/*.py
 figures/out/    committed render baselines, both grounds, plus readback records
 docs/           skill.md (how to write a figure) · architecture.md (the stack,
                 and the design step) · grammar.md · exposition.md
+                brand/ — the wordmark and social card, drawn by the library
+                they brand (same ink, same grain, same math face)
 tests/
 ```
 
