@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import base64
 import io
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .style import DEFAULT_STYLE, Ink, Role, Style
 
@@ -270,7 +270,10 @@ def _from_style(style: Style, **kw) -> dict:
 
 CLEAN = Theme(**_from_style(DEFAULT_STYLE))
 
-# Risograph: warm paper, sun-bleached saturated hues, printed grain.
+# Risograph: white paper, sun-bleached saturated hues, printed grain. The sheet
+# is white with a whisper of warm falloff — enough for the grain to read as a
+# printed texture rather than noise, without tinting the ink it sits under.
+# RISO_CREAM below keeps the original warm stock.
 RISO = Theme(
     inks={
         Role.CONTENT: Ink("#33302e", 1.7),
@@ -281,8 +284,8 @@ RISO = Theme(
         Role.ACCENT2: Ink("#c8402f", 1.9),        # brick red
         Role.MUTED: Ink("#857a63", 1.3),
     },
-    background="#efe9dc",
-    paper=("#f2ede1", "#e9dfcd"),
+    background="#ffffff",
+    paper=("#ffffff", "#f6f4f1"),
     # Level-curve ramp, re-stepped to stay monotone in L *and* above the
     # stroke floor on cream: the old light end (#e9c46a) was 1.27:1, so the
     # low-k level curves were effectively unprinted. The cost is a narrower
@@ -338,6 +341,9 @@ def opaque_variant(theme: Theme) -> Theme:
     from dataclasses import replace
     return replace(theme, transparent=False)
 
+
+#: the original warm stock, kept as a named option
+RISO_CREAM = replace(RISO, background="#efe9dc", paper=("#f2ede1", "#e9dfcd"))
 
 RISO_PAPER = opaque_variant(RISO)      # == RISO; the ground is now the default
 CLEAN_PAPER = opaque_variant(CLEAN)
